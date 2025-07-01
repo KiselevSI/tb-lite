@@ -72,7 +72,7 @@ process run_mapping {
     input:
         tuple  val(sample_name), path(fastq_files)
         path   bwa_index
-        //each ref
+        each ref
 
     output:
         tuple val(sample_name), path("${sample_name}.bam"), path("${sample_name}.bam.bai")
@@ -81,8 +81,8 @@ process run_mapping {
         
 
         def files = fastq_files instanceof List ? fastq_files : [fastq_files]
-        def ref = bwa_index instanceof List ? bwa_index : [bwa_index]
-        ref = ref[0]
+        //def ref = bwa_index instanceof List ? bwa_index : [bwa_index]
+        //ref = ref[0]
 
         if (files.size() == 2) {
             def read1 = files[0]
@@ -140,9 +140,11 @@ workflow {
 
     bwa_idx = Channel.fromPath("${params.reference}*").collect()
 
-    bam = run_mapping(trimmed, bwa_idx)
-
     ref = Channel.fromPath("$params.reference")
+
+    bam = run_mapping(trimmed, bwa_idx, ref)
+
+    //ref = Channel.fromPath("$params.reference")
 
     run_call_variants(bam, ref)
 }
