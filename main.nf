@@ -3,12 +3,13 @@ params.outdir = "./results"
 params.fastqc_dir = "${params.outdir}/fastqc_reports"
 params.threads = 10
 params.reference    = "ref/h37rv.fa"
+params.mode = 'link'
 
 
 
 process run_fastqc {
     tag "Sample: $sample_name"
-    publishDir("${params.fastqc_dir}/$sample_name", mode: 'rellink')
+    publishDir("${params.fastqc_dir}/$sample_name", mode: params.mode)
     
     input:
     tuple val(sample_name), path(fastq_files)
@@ -39,7 +40,7 @@ process run_fastqc {
 
 process run_fastp {
     tag "Sample: $sample_name"
-    publishDir("${params.outdir}/fastp/$sample_name", mode: 'rellink')
+    publishDir("${params.outdir}/fastp/$sample_name", mode: params.mode)
     
     input:
     tuple val(sample_name), path(fastq_files)
@@ -67,7 +68,7 @@ process run_fastp {
 
 process run_mapping {
     tag "Sample: $sample_name"
-    publishDir "${params.outdir}/mapped/${sample_name}", mode: 'rellink'
+    publishDir "${params.outdir}/mapped/${sample_name}", mode: params.mode
 
     input:
         tuple  val(sample_name), path(fastq_files)
@@ -105,7 +106,7 @@ process run_mapping {
 }
 process run_call_variants {
     tag "Sample: ${sample_name}"
-    publishDir "${params.outdir}/vcf/${sample_name}", mode: 'rellink'
+    publishDir "${params.outdir}/vcf/${sample_name}", mode: params.mode
 
     input:
         tuple val(sample_name), path(bam), path(bam_idx)
