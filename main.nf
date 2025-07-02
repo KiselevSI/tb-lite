@@ -5,7 +5,7 @@ params.threads = 10
 params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
 params.rd_path    = "scripts/rd.py"
-params.rd_db    = "/home/zerg/git/tb-lite/db/RD.bed"
+params.rd_db    = "db/RD.bed"
 
 process run_fastqc {
     tag "Sample: $sample_name"
@@ -137,13 +137,22 @@ process run_mosdepth {
         tuple val(sample_name), path(bam), path(bam_idx)        
 
     output:
-        tuple path("${sample_name}.mosdepth.global.dist.txt"), path("${sample_name}.mosdepth.summary.txt"), path("${sample_name}.per-base.bed.gz.csi")
+        tuple path("${sample_name}.mosdepth.global.dist.txt"), path("${sample_name}.per-base.bed.gz.csi")
+
+        tuple val(sample_name), path("${sample_name}.mosdepth.summary.txt"), emit: cov
 
         tuple val(sample_name), path("${sample_name}.per-base.bed.gz"),  emit: bed
+
+        tuple val(sample_name), path("${sample_name}.median.txt"), emit: median
+
+
 
     script:
         """
         mosdepth --fast-mode $sample_name $bam
+
+        sort -k2,2nr ${sample_name}.mosdepth.global.dist.txt | awk '\$3>=0.5 {print \$2; exit}' > ${sample_name}.median.txt
+
         """
 }
 process run_rd {
@@ -167,6 +176,31 @@ process run_rd {
         -o ${sample_name}.known_rd.tsv
         """
 }
+
+process run_spotyping {
+    tag        "SpoTyping: $sample_name"
+    publishDir "${params.outdir}/spotyping/$sample_name", mode: params.mode
+    conda      "conda-envs/spotyping.yaml" 
+
+    input:
+        tuple val(sample_name), path(fastq_files)
+
+    output:
+        path("$sample_name.*"), emit: other
+        path("$sample_name"), emit: code
+
+    script:
+        def reads = fastq_files instanceof List ? fastq_files : [fastq_files]
+
+        reads = reads.join(" ")
+
+        """
+        SpoTyping.py $reads -o $sample_name
+        """
+}
+
+
+
 workflow {
 
     reads = Channel.fromPath("${params.reads}/*.fastq", checkIfExists: true)
@@ -174,6 +208,9 @@ workflow {
         .groupTuple()
         
     run_fastqc(reads)
+
+    run_spotyping(reads)
+
     trimmed = run_fastp(reads).trimmed_reads
 
     bwa_idx = Channel.fromPath("${params.reference}*").collect()
@@ -182,14 +219,14 @@ workflow {
 
     bam = run_mapping(trimmed, bwa_idx, ref)
 
-    stat_mosdp = run_mosdepth(bam).bed
+    stat_mosdp = run_mosdepth(bam)
+    //stat_mosdp.cov.map{ f -> f.text }.view()
+    //stat_mosdp.median.map{ it[1].text }.view()
 
     rd_path = Channel.fromPath(params.rd_path)
     rd_db = Channel.fromPath(params.rd_db)
 
-    run_rd(stat_mosdp, rd_path, rd_db)
-
-    //ref = Channel.fromPath("$params.reference")
+    run_rd(stat_mosdp.bed, rd_path, rd_db)
 
     run_call_variants(bam, ref)
 }
