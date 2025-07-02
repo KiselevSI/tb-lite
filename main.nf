@@ -4,8 +4,8 @@ params.fastqc_dir = "${params.outdir}/fastqc_reports"
 params.threads = 10
 params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
-
-
+params.rd_path    = "scripts/rd.py"
+params.rd_db    = "/home/zerg/git/tb-lite/db/RD.bed"
 
 process run_fastqc {
     tag "Sample: $sample_name"
@@ -129,7 +129,44 @@ process run_call_variants {
         """
 }
 
+process run_mosdepth {
+    tag "Sample: ${sample_name}"
+    publishDir "${params.outdir}/stats/mosdepth/${sample_name}", mode: params.mode
 
+    input:
+        tuple val(sample_name), path(bam), path(bam_idx)        
+
+    output:
+        tuple path("${sample_name}.mosdepth.global.dist.txt"), path("${sample_name}.mosdepth.summary.txt"), path("${sample_name}.per-base.bed.gz.csi")
+
+        tuple val(sample_name), path("${sample_name}.per-base.bed.gz"),  emit: bed
+
+    script:
+        """
+        mosdepth --fast-mode $sample_name $bam
+        """
+}
+process run_rd {
+    tag "Sample: ${sample_name}"
+    publishDir "${params.outdir}/rd/${sample_name}", mode: params.mode
+
+    input:
+        tuple val(sample_name), path(bed)
+        each rd
+        each db
+
+    output:
+        tuple val(sample_name), path("${sample_name}.novel_rd.tsv"),
+        path("${sample_name}.known_rd.tsv")
+
+    script:
+        """
+        python3 $rd $bed \
+        -k $db \
+        -n ${sample_name}.novel_rd.tsv \
+        -o ${sample_name}.known_rd.tsv
+        """
+}
 workflow {
 
     reads = Channel.fromPath("${params.reads}/*.fastq", checkIfExists: true)
@@ -144,6 +181,13 @@ workflow {
     ref = Channel.fromPath("$params.reference")
 
     bam = run_mapping(trimmed, bwa_idx, ref)
+
+    stat_mosdp = run_mosdepth(bam).bed
+
+    rd_path = Channel.fromPath(params.rd_path)
+    rd_db = Channel.fromPath(params.rd_db)
+
+    run_rd(stat_mosdp, rd_path, rd_db)
 
     //ref = Channel.fromPath("$params.reference")
 
