@@ -8,7 +8,7 @@ params.rd_path    = "scripts/rd.py"
 params.rd_db    = "db/RD.bed"
 
 process run_fastqc {
-    tag "Sample: $sample_name"
+    tag "fastqc: $sample_name"
     publishDir("${params.fastqc_dir}/$sample_name", mode: params.mode)
     
     input:
@@ -39,7 +39,7 @@ process run_fastqc {
 }
 
 process run_fastp {
-    tag "Sample: $sample_name"
+    tag "fastp: $sample_name"
     publishDir("${params.outdir}/fastp/$sample_name", mode: params.mode)
     
     input:
@@ -67,7 +67,7 @@ process run_fastp {
 }
 
 process run_mapping {
-    tag "Sample: $sample_name"
+    tag "mapping: $sample_name"
     publishDir "${params.outdir}/mapped/${sample_name}", mode: params.mode
 
     input:
@@ -105,7 +105,7 @@ process run_mapping {
         }
 }
 process run_call_variants {
-    tag "Sample: ${sample_name}"
+    tag "call_variants: ${sample_name}"
     publishDir "${params.outdir}/vcf/${sample_name}", mode: params.mode
 
     input:
@@ -130,7 +130,7 @@ process run_call_variants {
 }
 
 process run_mosdepth {
-    tag "Sample: ${sample_name}"
+    tag "mosdepth: ${sample_name}"
     publishDir "${params.outdir}/stats/mosdepth/${sample_name}", mode: params.mode
 
     input:
@@ -156,7 +156,7 @@ process run_mosdepth {
         """
 }
 process run_rd {
-    tag "Sample: ${sample_name}"
+    tag "RD: ${sample_name}"
     publishDir "${params.outdir}/rd/${sample_name}", mode: params.mode
 
     input:
@@ -199,7 +199,23 @@ process run_spotyping {
         """
 }
 
+process run_tblg {
+    tag        "tblg: $sample_name"
+    publishDir "${params.outdir}/lineage/$sample_name", mode: params.mode
+    conda      "conda-envs/tblg.yaml" 
 
+    input:
+        tuple val(sample_name), path(vcf), path(vcf_csi)
+
+    output:
+        path("${sample_name}.lg.tsv")
+
+    script:
+        
+        """
+        tblg $vcf -o ${sample_name}.lg.tsv
+        """
+}
 
 workflow {
 
@@ -228,5 +244,7 @@ workflow {
 
     run_rd(stat_mosdp.bed, rd_path, rd_db)
 
-    run_call_variants(bam, ref)
+    vcf = run_call_variants(bam, ref)
+
+    run_tblg(vcf)
 }
