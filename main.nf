@@ -203,7 +203,7 @@ process run_spotyping {
 
 process run_tblg {
     tag        "tblg: $sample_name"
-    publishDir "${params.outdir}/lineage/$sample_name", mode: params.mode
+    publishDir "${params.outdir}/lineage", mode: params.mode
     conda      "conda-envs/tblg.yaml" 
 
     input:
