@@ -230,12 +230,12 @@ process run_is6110 {
         each ref_gbk
 
     output:
-        path("*")
+        path("$sample_name/*")
 
     script:
 
         """
-        ismap --reads $read1 $read2 --queries $IS6110 --reference $ref_gbk
+        ismap --reads $read1 $read2 --queries $IS6110 --reference $ref_gbk --bam
         """
 }
 
