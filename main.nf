@@ -6,6 +6,8 @@ params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
 params.rd_path    = "scripts/rd.py"
 params.rd_db    = "db/RD.bed"
+params.IS6110    = "IS6110_db/is6110.fasta"
+params.ref_gbk    = "IS6110_db/h37rv.gbk"
 
 process run_fastqc {
     tag "fastqc: $sample_name"
@@ -217,15 +219,52 @@ process run_tblg {
         """
 }
 
+process run_is6110 {
+    tag        "SpoTyping: $sample_name"
+    publishDir "${params.outdir}/is6110/paired", mode: params.mode
+    conda      "conda-envs/ismapper.yaml" 
+
+    input:
+        tuple val(sample_name), path(read1), path(read2)
+        each IS6110
+        each ref_gbk
+
+    output:
+        path("*")
+
+    script:
+
+        """
+        ismap --reads $read1 $read2 --queries $IS6110 --reference $ref_gbk
+        """
+}
+
 workflow {
 
     reads = Channel.fromPath("${params.reads}/*.fastq", checkIfExists: true)
         .map { [it.baseName.replaceFirst(/_R?[12].*/, ''), it] }
         .groupTuple()
+
+    single_reads =  reads.filter { id, files -> files.size() == 1 }
+        .map    { id, files -> tuple(id, files[0]) }.groupTuple()
+    
+    paired_reads = reads.filter { id, files -> files.size() == 2 }
+        .map    { id, files ->
+            // упорядочим, чтобы сначала был R1
+            def (r1, r2) = files.sort { it.name }
+            tuple(id, r1, r2)
+        }
+
+    IS6110 = Channel.fromPath(params.IS6110)
+    ref_gbk = Channel.fromPath(params.ref_gbk)
+
+
         
     run_fastqc(reads)
 
     run_spotyping(reads)
+
+    run_is6110(paired_reads, IS6110, ref_gbk)
 
     trimmed = run_fastp(reads).trimmed_reads
 
@@ -241,6 +280,8 @@ workflow {
 
     rd_path = Channel.fromPath(params.rd_path)
     rd_db = Channel.fromPath(params.rd_db)
+
+    
 
     run_rd(stat_mosdp.bed, rd_path, rd_db)
 

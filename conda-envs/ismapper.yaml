@@ -1,0 +1,9 @@
+name: ismapper
+channels:
+  - conda-forge     # always first
+  - bioconda        # bioconda second
+dependencies:
+  - python=3.8     # **exact flavour** — one candidate only
+  - ismapper=2.0.2
+  - biopython=1.77                # last version allowed by ismapper
+  - setuptools<60                 # modern enough, still builds wheels
