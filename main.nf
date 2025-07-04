@@ -75,7 +75,7 @@ process run_mapping {
     input:
         tuple  val(sample_name), path(fastq_files)
         path   bwa_index
-        each ref
+        path ref
 
     output:
         tuple val(sample_name), path("${sample_name}.bam"), path("${sample_name}.bam.bai")
@@ -112,7 +112,7 @@ process run_call_variants {
 
     input:
         tuple val(sample_name), path(bam), path(bam_idx)
-        each ref
+        path ref
         
 
     output:
@@ -163,8 +163,8 @@ process run_rd {
 
     input:
         tuple val(sample_name), path(bed)
-        each rd
-        each db
+        path rd
+        path db
 
     output:
         tuple val(sample_name), path("${sample_name}.novel_rd.tsv"),
@@ -220,7 +220,7 @@ process run_tblg {
 }
 
 process run_is6110 {
-    tag        "SpoTyping: $sample_name"
+    tag        "is6110: $sample_name"
     publishDir "${params.outdir}/is6110/paired", mode: params.mode
     conda      "conda-envs/ismapper.yaml" 
 
@@ -239,16 +239,73 @@ process run_is6110 {
         """
 }
 
+process run_rename_chromosome {
+    tag        "drug_resist: $sample_name"
+    
+
+    input:
+        tuple val(sample_name), path(vcf), path(vcf_csi)
+        path chromosome_name
+        
+
+    output:
+        tuple val(sample_name), path("${sample_name}.renamed_chromosome.vcf.gz")
+
+    script:
+
+        """
+        bcftools annotate --rename-chrs $chromosome_name $vcf -O z -o ${sample_name}.renamed_chromosome.vcf.gz
+        """
+}
+
+process run_annotate_vcf{
+    tag        "drug_resist: $sample_name"
+    conda      "conda-envs/dr.yaml" 
+
+    input:
+        tuple val(sample_name), path(vcf_renamed)        
+
+    output:
+        tuple val(sample_name), path("${sample_name}.annotated.vcf.gz")
+
+    script:
+
+        """
+        snpEff ann -v Mycobacterium_tuberculosis_h37rv $vcf_renamed | bgzip -c > ${sample_name}.annotated.vcf.gz
+        """
+}
+
+process run_drug_resist {
+    tag        "drug_resist: $sample_name"
+    publishDir "${params.outdir}/drug_resist/$sample_name", mode: params.mode
+    conda      "conda-envs/dr.yaml" 
+
+    input:
+        tuple val(sample_name), path(vcf_annotated)
+        path tb_resistance
+        path db_drug_resist
+        
+
+    output:
+        path("*")
+
+    script:
+
+        """
+        python3 $tb_resistance -i $vcf_annotated -o ${sample_name}.drug_resist.csv -d
+        """
+}
+
 workflow {
 
     reads = Channel.fromPath("${params.reads}/*.fastq", checkIfExists: true)
         .map { [it.baseName.replaceFirst(/_R?[12].*/, ''), it] }
         .groupTuple()
 
-    single_reads =  reads.filter { id, files -> files.size() == 1 }
-        .map    { id, files -> tuple(id, files[0]) }.groupTuple()
+    //single_reads =  reads.filter { id, files -> files.size() == 1 }
+    //    .map    { id, files -> tuple(id, files[0]) }.groupTuple()
     
-    paired_reads = reads.filter { id, files -> files.size() == 2 }
+    paired_reads = reads.filter { _id, files -> files.size() == 2 }
         .map    { id, files ->
             // упорядочим, чтобы сначала был R1
             def (r1, r2) = files.sort { it.name }
@@ -268,9 +325,11 @@ workflow {
 
     trimmed = run_fastp(reads).trimmed_reads
 
-    bwa_idx = Channel.fromPath("${params.reference}*").collect()
+    bwa_idx = Channel.fromPath("${params.reference}.*")          // ref/h37rv.fa.*
+          .filter { !it.name.endsWith('.fa') }               // вдруг попала копия .fa
+          .collect()
 
-    ref = Channel.fromPath("$params.reference")
+    ref = Channel.value(file("$params.reference"))
 
     bam = run_mapping(trimmed, bwa_idx, ref)
 
@@ -278,14 +337,23 @@ workflow {
     //stat_mosdp.cov.map{ f -> f.text }.view()
     //stat_mosdp.median.map{ it[1].text }.view()
 
-    rd_path = Channel.fromPath(params.rd_path)
-    rd_db = Channel.fromPath(params.rd_db)
+    rd_path = Channel.value(file(params.rd_path))
+    rd_db = Channel.value(file(params.rd_db))
 
     
 
     run_rd(stat_mosdp.bed, rd_path, rd_db)
 
-    vcf = run_call_variants(bam, ref)
+    vcf = run_call_variants(bam, ref).view()
+
+    db_drug_resist = Channel.value(file("db_drug_resist"))
+    chr_name = Channel.value(file("scripts/chr.txt"))
+    script_dr_path = Channel.value(file("scripts/tb_resistance.py"))
+
+    vcf_renamed = run_rename_chromosome(vcf, chr_name)
+    vcf_annotated = run_annotate_vcf(vcf_renamed)
+
+    run_drug_resist(vcf_annotated, script_dr_path, db_drug_resist)
 
     run_tblg(vcf)
 }

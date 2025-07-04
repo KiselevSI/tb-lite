@@ -1,0 +1,8 @@
+name: ismapper
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - snpEff
+  - pyyaml
