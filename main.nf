@@ -1,7 +1,7 @@
 params.reads = "./data"
 params.outdir = "./results"
 params.fastqc_dir = "${params.outdir}/fastqc_reports"
-params.threads = 10
+params.threads = 3
 params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
 params.rd_path    = "scripts/rd.py"
@@ -296,32 +296,21 @@ process run_drug_resist {
         """
 }
 
+
 workflow {
 
     reads = Channel.fromPath("${params.reads}/*.fastq", checkIfExists: true)
         .map { [it.baseName.replaceFirst(/_R?[12].*/, ''), it] }
         .groupTuple()
 
-    //single_reads =  reads.filter { id, files -> files.size() == 1 }
-    //    .map    { id, files -> tuple(id, files[0]) }.groupTuple()
     
-    paired_reads = reads.filter { _id, files -> files.size() == 2 }
-        .map    { id, files ->
-            // упорядочим, чтобы сначала был R1
-            def (r1, r2) = files.sort { it.name }
-            tuple(id, r1, r2)
-        }
 
     IS6110 = Channel.fromPath(params.IS6110)
     ref_gbk = Channel.fromPath(params.ref_gbk)
 
 
         
-    run_fastqc(reads)
-
-    run_spotyping(reads)
-
-    run_is6110(paired_reads, IS6110, ref_gbk)
+    
 
     trimmed = run_fastp(reads).trimmed_reads
 
@@ -331,20 +320,85 @@ workflow {
 
     ref = Channel.value(file("$params.reference"))
 
-    bam = run_mapping(trimmed, bwa_idx, ref)
+    bam_all = run_mapping(trimmed, bwa_idx, ref)
 
-    stat_mosdp = run_mosdepth(bam)
-    //stat_mosdp.cov.map{ f -> f.text }.view()
-    //stat_mosdp.median.map{ it[1].text }.view()
+    cov_all = run_mosdepth(bam_all)
+    
+    
+
+    // ----------------------------------------------------------------
+    // 4) Определяем «хорошие» образцы (медиана > 0)
+    // ----------------------------------------------------------------
+    cov_all.median
+        .map    { id, f -> tuple(id, ((f.text.trim()) ?: '0') as Integer) }
+        .filter { id, cov -> cov > 5 }
+        .map    { id, cov -> id }  // берём только первый элемент
+        .set    { GOOD_SAMPLES }         // дублируемый канал
+
+
+    // «плохие» ─ медиана ≤ 0
+    cov_all.median
+        .map    { id, f -> tuple(id, ((f.text.trim()) ?: '0') as Integer) }
+        .filter { id, cov -> cov <= 5 }
+        .map    { id, cov -> id }
+        .set    { BAD_SAMPLES }       // новый канал
+
+
+    // results/bad_samples.txt с перезаписью при повторных запусках
+    BAD_SAMPLES
+        .collectFile(
+            name:      'bad_samples_coverage_less_than_5.txt',   // имя результирующего файла
+            storeDir:  params.outdir,       // куда положить
+            newLine:   true,                // добавлять \n между элементами
+            sort:      true               // (опционно) отсортировать
+            )
+
+
+
+
+
+
+    // ----------------------------------------------------------------
+    // 5) Фильтруем trimmed‑reads, BAM и BED
+    // ----------------------------------------------------------------
+    trimmed_good = trimmed
+        .join( GOOD_SAMPLES.map { tuple(it) } )
+        .map  { id, fq_files -> tuple(id, fq_files) }
+
+    bam_good = bam_all
+        .join( GOOD_SAMPLES.map { tuple(it) } )
+        .map  { id, bam_file, bai_file -> tuple(id, bam_file, bai_file) }
+
+    bed_good = cov_all.bed
+        .join( GOOD_SAMPLES.map { tuple(it) } )
+        .map  { id, bed_file -> tuple(id, bed_file) }
+
+
+    run_fastqc(trimmed_good)
+
+    run_spotyping(trimmed_good)
+
+    //single_reads =  reads.filter { id, files -> files.size() == 1 }
+    //    .map    { id, files -> tuple(id, files[0]) }.groupTuple()
+    
+    paired_reads = reads.filter { _id, files -> files.size() == 2 }
+        .map    { id, files ->
+            // упорядочим, чтобы сначала был R1
+            def (r1, r2) = files.sort { it.name }
+            tuple(id, r1, r2)
+        }.join( GOOD_SAMPLES.map { tuple(it) } )
+
+    run_is6110(paired_reads, IS6110, ref_gbk)
+
 
     rd_path = Channel.value(file(params.rd_path))
     rd_db = Channel.value(file(params.rd_db))
 
     
 
-    run_rd(stat_mosdp.bed, rd_path, rd_db)
+    run_rd(cov_all.bed, rd_path, rd_db)
 
-    vcf = run_call_variants(bam, ref).view()
+    vcf = run_call_variants(bam_good, ref)
 
     db_drug_resist = Channel.value(file("db_drug_resist"))
     chr_name = Channel.value(file("scripts/chr.txt"))
