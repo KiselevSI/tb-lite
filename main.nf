@@ -1,7 +1,7 @@
 params.reads = "./data"
 params.outdir = "./results"
 params.fastqc_dir = "${params.outdir}/fastqc_reports"
-params.threads = 3
+params.threads = 10
 params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
 params.rd_path    = "scripts/rd.py"
@@ -331,16 +331,16 @@ workflow {
     // ----------------------------------------------------------------
     cov_all.median
         .map    { id, f -> tuple(id, ((f.text.trim()) ?: '0') as Integer) }
-        .filter { id, cov -> cov > 5 }
-        .map    { id, cov -> id }  // берём только первый элемент
+        .filter { _id, cov -> cov > 5 }
+        .map    { id, _cov -> id }  // берём только первый элемент
         .set    { GOOD_SAMPLES }         // дублируемый канал
 
 
     // «плохие» ─ медиана ≤ 0
     cov_all.median
         .map    { id, f -> tuple(id, ((f.text.trim()) ?: '0') as Integer) }
-        .filter { id, cov -> cov <= 5 }
-        .map    { id, cov -> id }
+        .filter { _id, cov -> cov <= 5 }
+        .map    { id, _cov -> id }
         .set    { BAD_SAMPLES }       // новый канал
 
 
@@ -396,7 +396,7 @@ workflow {
 
     
 
-    run_rd(cov_all.bed, rd_path, rd_db)
+    run_rd(bed_good, rd_path, rd_db)
 
     vcf = run_call_variants(bam_good, ref)
 
@@ -410,4 +410,6 @@ workflow {
     run_drug_resist(vcf_annotated, script_dr_path, db_drug_resist)
 
     run_tblg(vcf)
+
+    
 }
