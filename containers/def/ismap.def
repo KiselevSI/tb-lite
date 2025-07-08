@@ -1,0 +1,34 @@
+Bootstrap: docker
+From: python:3.8-slim    # при желании поменяйте версию Python
+
+%labels
+    Author      Your Name
+    Version     1.0
+
+%post
+    set -e
+
+    # Обновляем репозитории и ставим минимальный набор системных пакетов
+    apt-get update \
+      && apt-get install -y --no-install-recommends \
+         build-essential \
+         git \
+         bwa \
+         samtools \
+         bedtools \
+         ncbi-blast+ \
+      && rm -rf /var/lib/apt/lists/*
+
+    # Устанавливаем Python-библиотеки
+    pip install setuptools biopython pysam
+    pip install git+https://github.com/jhawkey/IS_mapper
+    
+
+######################################################################
+# Переменные окружения, доступные внутри контейнера
+######################################################################
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export PYTHONUNBUFFERED=1      # мгновенный вывод в консоль
+

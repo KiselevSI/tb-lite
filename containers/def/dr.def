@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: python:3.12-slim    # при желании поменяйте версию Python
+
+%labels
+    Author      Your Name
+    Version     1.0
+    Description Singularity image for CorrectedMosdepthRDScanner
+%files
+    /home/zerg/git/tb-lite/scripts/tb_resistance.py  /usr/local/bin/tb_resistance.py
+    /home/zerg/git/tb-lite/db_drug_resist /usr/local/bin/db_drug_resist
+
+%post
+    set -e
+
+    # Обновляем репозитории и ставим минимальный набор системных пакетов
+    apt-get update \
+      && apt-get install -y --no-install-recommends \
+         build-essential \
+      && rm -rf /var/lib/apt/lists/*
+
+    # Устанавливаем Python-библиотеки
+    pip install pyyaml
+
+ 
+
+    
+
+######################################################################
+# Переменные окружения, доступные внутри контейнера
+######################################################################
+%environment
+    export PATH=/usr/local/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%runscript
+    # Передаём контейнеру все аргументы пользователя
+    exec python3 /usr/local/bin/tb_resistance.py "$@"

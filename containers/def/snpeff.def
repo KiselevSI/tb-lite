@@ -1,0 +1,43 @@
+Bootstrap: docker
+From: eclipse-temurin:24-jre      # ← JRE 24, самая свежая на сегодня
+
+%labels
+    Author      Your Name
+    Software    snpEff 5.2f
+    Java        OpenJDK 24
+
+########################################
+# Копируем готовую папку snpEff внутрь
+########################################
+%files
+    /home/zerg/git/tb-lite/containers/def/snpEff  /opt/snpEff
+
+########################################
+%post
+    set -e
+    # JRE уже установлен в базовом образе,
+    # ставить ничего не нужно: просто проверим версию
+    java -version
+    apt-get update && \
+      apt-get install -y --no-install-recommends \
+          tabix \
+          ca-certificates && \
+      rm -rf /var/lib/apt/lists/*
+
+    # (необязательно) дублируем JAR в корень для короткого пути
+    ln -s /opt/snpEff/snpEff.jar /snpEff.jar
+
+
+########################################
+%environment
+    export SNPEFF_HOME=/opt/snpEff
+    export PATH=/usr/local/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+
+
+########################################
+%test
+    # Проверяем, что Java 24 видит JAR
+    java -jar /opt/snpEff/snpEff.jar -version | grep -q 'SnpEff'

@@ -1,6 +1,0 @@
-name: spotyping
-channels:
-  - bioconda
-  - conda-forge
-dependencies:
-  - spotyping

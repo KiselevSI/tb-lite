@@ -1,0 +1,40 @@
+# ---------- Singularity.def ----------
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author    Вы
+    Version   0.1
+    Toolset   "BWA 0.7.17; Samtools 1.14"
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    export PATH=/usr/bin:$PATH
+
+%post
+    ## Обновляем индекс пакетов и ставим инструменты
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        bwa samtools \
+        ca-certificates locales
+
+    ## Генерируем минимальную UTF-8 локаль (избавляет perl-warning FastQC и BWA)
+    sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+    locale-gen
+
+    ## Чистим кэш apt, чтобы уменьшить размер образа
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%test
+    echo ">>> Проверяем версии"
+    bwa 2>&1 | head -n1            # ожидаем 0.7.17-r1188
+    samtools --version | head -n1  # ожидаем samtools 1.14
+
+%help
+    Внутри образа доступны команды:
+      • bwa
+      • samtools
+    Пример запуска:
+        apptainer exec bwa_samtools.sif bwa mem ref.fa reads.fq > aln.sam

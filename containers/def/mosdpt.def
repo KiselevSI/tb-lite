@@ -1,0 +1,27 @@
+# ---------- Singularity.def ----------
+Bootstrap: docker
+From: ubuntu:22.04
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    export PATH=/usr/bin:$PATH
+
+%post
+    ## Обновляем индекс пакетов и ставим инструменты
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        wget \
+        ca-certificates locales
+
+    ## Чистим кэш apt, чтобы уменьшить размер образа
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+
+    cd /opt
+    wget https://github.com/brentp/mosdepth/releases/download/v0.3.11/mosdepth
+    chmod +x mosdepth
+
+    ln -s /opt/mosdepth /usr/bin/mosdepth
+

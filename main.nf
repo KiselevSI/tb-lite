@@ -163,7 +163,6 @@ process run_rd {
 
     input:
         tuple val(sample_name), path(bed)
-        path rd
         path db
 
     output:
@@ -172,7 +171,7 @@ process run_rd {
 
     script:
         """
-        python3 $rd $bed \
+        rd.py $bed \
         -k $db \
         -n ${sample_name}.novel_rd.tsv \
         -o ${sample_name}.known_rd.tsv
@@ -182,7 +181,6 @@ process run_rd {
 process run_spotyping {
     tag        "SpoTyping: $sample_name"
     publishDir "${params.outdir}/spotyping/$sample_name", mode: params.mode
-    conda      "conda-envs/spotyping.yaml" 
 
     input:
         tuple val(sample_name), path(fastq_files)
@@ -204,7 +202,6 @@ process run_spotyping {
 process run_tblg {
     tag        "tblg: $sample_name"
     publishDir "${params.outdir}/lineage", mode: params.mode
-    conda      "conda-envs/tblg.yaml" 
 
     input:
         tuple val(sample_name), path(vcf), path(vcf_csi)
@@ -222,7 +219,6 @@ process run_tblg {
 process run_is6110 {
     tag        "is6110: $sample_name"
     publishDir "${params.outdir}/is6110/paired", mode: params.mode
-    conda      "conda-envs/ismapper.yaml" 
 
     input:
         tuple val(sample_name), path(read1), path(read2)
@@ -260,7 +256,6 @@ process run_rename_chromosome {
 
 process run_annotate_vcf{
     tag        "drug_resist: $sample_name"
-    conda      "conda-envs/dr.yaml" 
 
     input:
         tuple val(sample_name), path(vcf_renamed)        
@@ -271,20 +266,17 @@ process run_annotate_vcf{
     script:
 
         """
-        snpEff ann -v Mycobacterium_tuberculosis_h37rv $vcf_renamed | bgzip -c > ${sample_name}.annotated.vcf.gz
+        java -jar /snpEff.jar ann -v Mycobacterium_tuberculosis_h37rv $vcf_renamed | bgzip -c > ${sample_name}.annotated.vcf.gz
         """
 }
 
 process run_drug_resist {
     tag        "drug_resist: $sample_name"
     publishDir "${params.outdir}/drug_resist/$sample_name", mode: params.mode
-    conda      "conda-envs/dr.yaml" 
 
     input:
         tuple val(sample_name), path(vcf_annotated)
-        path tb_resistance
-        path db_drug_resist
-        
+   
 
     output:
         path("*")
@@ -292,7 +284,7 @@ process run_drug_resist {
     script:
 
         """
-        python3 $tb_resistance -i $vcf_annotated -o ${sample_name}.drug_resist.csv -d
+        tb_resistance.py -i $vcf_annotated -o ${sample_name}.drug_resist.csv -d
         """
 }
 
@@ -391,12 +383,11 @@ workflow {
     run_is6110(paired_reads, IS6110, ref_gbk)
 
 
-    rd_path = Channel.value(file(params.rd_path))
     rd_db = Channel.value(file(params.rd_db))
 
     
 
-    run_rd(bed_good, rd_path, rd_db)
+    run_rd(bed_good, rd_db)
 
     vcf = run_call_variants(bam_good, ref)
 
@@ -407,7 +398,7 @@ workflow {
     vcf_renamed = run_rename_chromosome(vcf, chr_name)
     vcf_annotated = run_annotate_vcf(vcf_renamed)
 
-    run_drug_resist(vcf_annotated, script_dr_path, db_drug_resist)
+    run_drug_resist(vcf_annotated)
 
     run_tblg(vcf)
 

@@ -1,0 +1,47 @@
+Bootstrap: docker
+From: debian:bookworm-slim          # современный base, BLAST 2.12 из APT
+
+%labels
+    Author        <ваше_имя>
+    Version       2.2
+    Description   "SpoTyping-v2.0 + BLAST 2.12 (via micromamba)"
+
+%environment
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export MAMBA_ROOT_PREFIX=/opt/conda          # где лежат все env
+    export PATH=$MAMBA_ROOT_PREFIX/envs/spotenv/bin:/opt/spotyping:$PATH
+
+%post
+    set -eu
+
+    ######## 0. системные пакеты ########
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends \
+        locales ca-certificates wget curl bzip2
+    
+
+    ######## 1. micromamba ########
+    mkdir -p /opt/micromamba  
+    curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+    | tar -C /opt/micromamba -xvj bin/micromamba --strip-components=1
+    ln -s /opt/micromamba/micromamba /usr/local/bin/micromamba
+
+    
+    export MAMBA_ROOT_PREFIX=/opt/conda
+    mkdir -p "$MAMBA_ROOT_PREFIX"
+
+
+    ######## 2. окружение Py 2.7 ########
+    micromamba create -y -n spotenv \
+    -c conda-forge -c bioconda \
+    python=2.7 spotyping
+
+ 
+  
+
+%test
+    echo ">>> Проверка SpoTyping и BLAST"
+    spotyping -h | head -n1
+    blastn -version | head -n1
