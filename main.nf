@@ -391,9 +391,7 @@ workflow {
 
     vcf = run_call_variants(bam_good, ref)
 
-    db_drug_resist = Channel.value(file("db_drug_resist"))
     chr_name = Channel.value(file("scripts/chr.txt"))
-    script_dr_path = Channel.value(file("scripts/tb_resistance.py"))
 
     vcf_renamed = run_rename_chromosome(vcf, chr_name)
     vcf_annotated = run_annotate_vcf(vcf_renamed)
