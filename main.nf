@@ -1,4 +1,4 @@
-params.reads = "./data"
+params.reads = "./data/"
 params.outdir = "./results"
 params.fastqc_dir = "${params.outdir}/fastqc_reports"
 params.threads = 10
@@ -28,12 +28,12 @@ process run_fastqc {
         def read1 = files[0]
         def read2 = files[1]
         """
-        fastqc -t ${params.threads} -o ./ $read1 $read2
+        fastqc -t ${task.cpus} -o ./ $read1 $read2
         """
     }else{
         def read1 = files[0]
         """
-        fastqc -t ${params.threads} -o ./ $read1
+        fastqc -t ${task.cpus} -o ./ $read1
         """
     }
 
@@ -91,7 +91,7 @@ process run_mapping {
             def read1 = files[0]
             def read2 = files[1]
             """
-            bwa mem -t ${params.threads} ${ref} ${read1} ${read2} \
+            bwa mem -t ${task.cpus} ${ref} ${read1} ${read2} \
               | samtools view -bS | samtools sort -o ${sample_name}.bam
 
             samtools index ${sample_name}.bam
@@ -99,7 +99,7 @@ process run_mapping {
         } else if (files.size() == 1) {
             def read1 = files[0]
             """
-            bwa mem -t ${params.threads} ${ref} ${read1} \
+            bwa mem -t ${task.cpus} ${ref} ${read1} \
               | samtools view -bS | samtools sort -o  ${sample_name}.bam
 
             samtools index ${sample_name}.bam
@@ -120,12 +120,12 @@ process run_call_variants {
 
     script:
         """
-        bcftools mpileup --threads ${params.threads} \
+        bcftools mpileup --threads ${task.cpus} \
             --min-MQ 30 --ignore-overlaps --max-depth 3000 \
             -f ${ref} ${bam} -Ou | \
-        bcftools call --threads ${params.threads} --multiallelic-caller \
+        bcftools call --threads ${task.cpus} --multiallelic-caller \
             --ploidy 1 --variants-only -Ou - | \
-        bcftools view --threads ${params.threads} \
+        bcftools view --threads ${task.cpus} \
             --include 'QUAL>20 && DP>10' -Oz -o ${sample_name}.vcf.gz
         bcftools index ${sample_name}.vcf.gz
         """
@@ -287,15 +287,22 @@ process run_drug_resist {
         tb_resistance.py -i $vcf_annotated -o ${sample_name}.drug_resist.csv -d
         """
 }
-
+params.suffix = 'fastq'
 
 workflow {
 
-    reads = Channel.fromPath("${params.reads}/*.fastq", checkIfExists: true)
-        .map { [it.baseName.replaceFirst(/_R?[12].*/, ''), it] }
-        .groupTuple()
+    /*  делаем две строки — одну для glob-поиска, вторую для regex-замены  */
+    def globSuffix   = params.suffix                               // в fromPath точек экранировать не нужно
+    def regexSuffix = params.suffix.replaceAll(/\./, '\\\\.')     // а в regex точкам надо экранировать
 
-    
+    reads = Channel
+    .fromPath("${params.reads}*.${globSuffix}", checkIfExists:true)
+    .map { file ->
+        def id = file.name.replaceFirst(/_[12]\.${regexSuffix}$/, '')
+        [ id, file ]
+    }
+    .groupTuple(sort:true)
+
 
     IS6110 = Channel.fromPath(params.IS6110)
     ref_gbk = Channel.fromPath(params.ref_gbk)
