@@ -1,7 +1,6 @@
 params.reads = "./data/"
 params.outdir = "./results"
 params.fastqc_dir = "${params.outdir}/fastqc_reports"
-params.threads = 10
 params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
 params.rd_path    = "scripts/rd.py"
