@@ -1,0 +1,7 @@
+picard_config:                       # ↓ это у вас уже работает
+  general_stats_target_coverage: [1, 5, 10, 30, 50]
+
+sample_names_replace_regex: true
+sample_names_replace:
+  "_trimmed_[12]$": ""
+

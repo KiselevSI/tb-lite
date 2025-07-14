@@ -1,0 +1,31 @@
+Bootstrap: docker
+From: ubuntu:20.04
+
+%environment
+    export PATH=/usr/local/bin:$PATH
+
+%post
+
+        # 1) Неинтерактивный фронтэнд для dpkg/apt
+    export DEBIAN_FRONTEND=noninteractive
+
+    # 2) Предзапись настроек TZ в базу debconf
+    echo 'tzdata tzdata/Areas select Etc'    | debconf-set-selections
+    echo 'tzdata tzdata/Zones/Etc select UTC' | debconf-set-selections
+
+    # Обновление и установка инструментов
+    apt-get update && apt-get install -y \
+        bwa \
+        samtools \
+        openjdk-17-jre-headless \
+        curl \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*  
+
+    # Загрузка Picard.jar из официального репозитория
+    curl -L -o /usr/local/bin/picard.jar \
+         https://github.com/broadinstitute/picard/releases/download/3.4.0/picard.jar 
+    chmod +x /usr/local/bin/picard.jar
+
+%runscript
+    # При вызове singularity exec ... picard.jar команда появляется автоматически
+    exec java -jar /usr/local/bin/picard.jar "$@"

@@ -1,22 +1,159 @@
 params.reads = "./data/"
 params.outdir = "./results"
-params.fastqc_dir = "${params.outdir}/fastqc_reports"
 params.reference    = "ref/h37rv.fa"
 params.mode = 'link'
 params.rd_path    = "scripts/rd.py"
 params.rd_db    = "db/RD.bed"
-params.IS6110    = "IS6110_db/is6110.fasta"
+params.is6110    = "IS6110_db/is6110.fasta"
 params.ref_gbk    = "IS6110_db/h37rv.gbk"
+params.suffix = 'fastq'
+nextflow.enable.dsl = 2 
+
+params.multiqc = "multiqc_config.yaml"
+
+params.min_align_pct  = 80
+params.min_mean_cov   = 10
+
+workflow {
+
+    /*  делаем две строки — одну для glob-поиска, вторую для regex-замены  */
+    glob_suffix   = params.suffix                               // в fromPath точек экранировать не нужно
+    regexSuffix = params.suffix.replaceAll(/\./, '\\\\.')     // а в regex точкам надо экранировать
+
+    reads = Channel
+        .fromPath("${params.reads}*.${glob_suffix}", checkIfExists: true)
+        .map { file ->                              // <— фикс здесь
+            def id = file.name
+                         .replaceFirst(/(?:_[12])?\.${regexSuffix}$/, '')
+            [ id, file ]
+        }
+        .groupTuple(sort: true)
+
+
+
+    
+    trimmed = run_fastp(reads).trimmed_reads
+
+    bwa_idx = Channel.fromPath("${params.reference}.*")          // ref/h37rv.fa.*
+          .filter { !it.name.endsWith('.fa') }               // вдруг попала копия .fa
+          .collect()
+
+    ref = Channel.value(file("$params.reference"))
+
+    bam_all = run_mapping(trimmed, bwa_idx, ref).bam
+
+    map_stats = run_map_stats(bam_all, ref)
+
+    wgs_metrics = map_stats.wgs
+    align_metrics = map_stats.align
+
+
+    samtools_stats = run_samtools_stats(bam_all)
+    // ------------------ 1) процент выравненных ------------------
+    align_pct = samtools_stats.rmp
+        .map { sample_name, rmp_file ->
+            tuple( sample_name, rmp_file.text.trim() as Float )
+        }
+    // ------------------ 2) среднее покрытие ---------------------
+    mean_cov = map_stats.mean
+        .map { sample_name, cov_file ->
+            tuple( sample_name, cov_file.text.trim() as Float )
+        }
+
+
+    bad_metrics = align_pct
+        .join(mean_cov)
+        .filter { id, pct, cov ->
+            pct < params.min_align_pct || cov < params.min_mean_cov
+        }
+        // преобразуем каждый кортеж в таб-делимитированную строку
+        .map { id, pct, cov ->
+            "${id}\t${pct}\t${cov}"
+        }
+
+    bad_header = Channel.value("sample_id\treads_mapped_pct\tmean_coverage")
+
+    bad_with_header = bad_header.mix(bad_metrics)
+
+    bad_with_header.collectFile(
+        name:     'bad_reads_low_coverage.txt',
+        storeDir: params.outdir,
+        newLine:  true,
+        sort:     false   // сортировать теперь не нужно (мы уже включили header)
+    )
+
+
+
+    // объединяем по ключу-идентификатору
+    good_samples = align_pct.join(mean_cov)
+        .filter { _id, pct, cov -> pct >= params.min_align_pct &&
+                                cov >= params.min_mean_cov }
+        .map { id, _p, _c -> id }
+
+    trimmed_good  = trimmed.join(good_samples.map{ tuple(it) })
+
+    bam_good      = bam_all.join(good_samples.map{ tuple(it) })
+
+    mosdepth_coverage = run_mosdepth(bam_good)
+    
+
+
+    fastqc_reports = run_fastqc(trimmed_good)
+
+    run_spotyping(trimmed_good)
+
+    paired_reads = trimmed_good.filter { _id, files -> files.size() == 2 }.map 
+        { id, files ->
+            def sorted = files.sort(false) { it.name }
+            tuple(id, sorted[0], sorted[1])}
+            .join( good_samples.map { tuple(it) } )
+
+
+    is6110 = Channel.value(file(params.is6110))
+    ref_gbk = Channel.value(file(params.ref_gbk))
+
+    run_is6110(paired_reads, is6110, ref_gbk)
+
+
+    rd_db = Channel.value(file(params.rd_db))
+
+    
+
+    run_rd(mosdepth_coverage.bed, rd_db)
+
+    vcf = run_call_variants(bam_good, ref)
+
+    chr_name = Channel.value(file("scripts/chr.txt"))
+
+    vcf_renamed = run_rename_chromosome(vcf, chr_name)
+    vcf_annotated = run_annotate_vcf(vcf_renamed)
+
+    run_drug_resist(vcf_annotated)
+
+    run_tblg(vcf)
+
+    cfg = Channel.fromPath(params.multiqc)
+
+    bcftools_stats = run_bcftools_stats(vcf)
+
+    multiqc_files = wgs_metrics.mix(align_metrics).mix(fastqc_reports).mix(bcftools_stats).mix(samtools_stats.stats).mix(samtools_stats.flagstat)
+
+    run_multiqc(multiqc_files.collect().ifEmpty([]), cfg)
+
+}
+
+
+
 
 process run_fastqc {
     tag "fastqc: $sample_name"
-    publishDir("${params.fastqc_dir}/$sample_name", mode: params.mode)
+    publishDir("${params.outdir}/fastqc/", mode: params.mode)
     
     input:
     tuple val(sample_name), path(fastq_files)
     
     output:
-    path "*.{html,zip}"
+    path "*"
     
     script:
 
@@ -27,12 +164,14 @@ process run_fastqc {
         def read1 = files[0]
         def read2 = files[1]
         """
-        fastqc -t ${task.cpus} -o ./ $read1 $read2
+        mkdir -p $sample_name
+        fastqc -t ${task.cpus} -o $sample_name $read1 $read2
         """
     }else{
         def read1 = files[0]
         """
-        fastqc -t ${task.cpus} -o ./ $read1
+        mkdir -p $sample_name
+        fastqc -t ${task.cpus} -o $sample_name $read1
         """
     }
 
@@ -48,7 +187,7 @@ process run_fastp {
     
     output:
     path "*.{html,json}", emit: report_trimm
-    tuple val(sample_name), path("*.trimmed.fastq"), emit: trimmed_reads    
+    tuple val(sample_name), path("*_trimmed*fastq.gz"), emit: trimmed_reads    
     
     script:
     // Приводим fastq_files к списку, если это не список
@@ -57,14 +196,60 @@ process run_fastp {
         def read1 = files[0]
         def read2 = files[1]
         """
-        fastp -i $read1 -I $read2 -o ${sample_name}_1.trimmed.fastq -O ${sample_name}_2.trimmed.fastq --detect_adapter_for_pe --trim_poly_g
+        fastp -i $read1 -I $read2 -o ${sample_name}_trimmed_1.fastq.gz -O ${sample_name}_trimmed_2.fastq.gz --detect_adapter_for_pe --trim_poly_g
         """
     } else if (files.size() == 1) {
         def read1 = files[0]
         """
-        fastp -i $read1 -o ${sample_name}_1.trimmed.fastq --detect_adapter_for_pe --trim_poly_g
+        fastp -i $read1 -o ${sample_name}_trimmed_1.fastq.gz --trim_poly_g
         """
     }
+}
+
+process run_mapping2 {
+    tag "mapping: $sample_name"
+    publishDir "${params.outdir}/mapped/${sample_name}", mode: params.mode
+
+    input:
+        tuple  val(sample_name), path(fastq_files)
+        path   bwa_index
+        path ref
+
+    output:
+    tuple val(sample_name), path("${sample_name}.dedup.bam"), path("${sample_name}.dedup.bam.bai"), emit: bam
+    path("*")
+
+    script:
+
+        def files = fastq_files instanceof List ? fastq_files : [fastq_files]
+            if (files.size() == 2) {
+                def read1 = files[0]
+                def read2 = files[1]
+                """
+                   bwa mem -t ${task.cpus} \
+                     -R "@RG\\tID:${sample_name}\\tSM:${sample_name}\\tPL:ILLUMINA" \
+                     ${ref} ${read1} ${read2} \
+                    | samblaster \
+                        --removeDups \
+                        --addMateTags \
+                    | samtools sort -@ ${task.cpus} -o ${sample_name}.dedup.bam - \
+                    && samtools index ${sample_name}.dedup.bam
+                """
+                
+            } else if (files.size() == 1) {
+                def read1 = files[0]
+                """
+                   bwa mem -t ${task.cpus} \
+                     -R "@RG\\tID:${sample_name}\\tSM:${sample_name}\\tPL:ILLUMINA" \
+                     ${ref} ${read1}  \
+                    | samblaster \
+                        --removeDups \
+                        --addMateTags \
+                    | samtools sort -@ ${task.cpus} -o ${sample_name}.dedup.bam - \
+                    && samtools index ${sample_name}.dedup.bam
+                """
+            }
+
 }
 
 process run_mapping {
@@ -77,34 +262,120 @@ process run_mapping {
         path ref
 
     output:
-        tuple val(sample_name), path("${sample_name}.bam"), path("${sample_name}.bam.bai")
+    tuple val(sample_name), path("${sample_name}.dedup.bam"), path("${sample_name}.dedup.bam.bai"), emit: bam
+    path("*")
 
     script:
-        
 
         def files = fastq_files instanceof List ? fastq_files : [fastq_files]
-        //def ref = bwa_index instanceof List ? bwa_index : [bwa_index]
-        //ref = ref[0]
+            if (files.size() == 2) {
+                def read1 = files[0]
+                def read2 = files[1]
+                """
+                   bwa mem -M -t ${task.cpus} \
+                     -R "@RG\\tID:${sample_name}\\tSM:${sample_name}\\tPL:ILLUMINA" \
+                     ${ref} ${read1} ${read2} \
+                    | samtools view -Sb - \
+                    | samtools sort -@ ${task.cpus} -o ${sample_name}.sorted.bam
 
-        if (files.size() == 2) {
-            def read1 = files[0]
-            def read2 = files[1]
-            """
-            bwa mem -t ${task.cpus} ${ref} ${read1} ${read2} \
-              | samtools view -bS | samtools sort -o ${sample_name}.bam
+                    java -jar /usr/local/bin/picard.jar MarkDuplicates \
+                        INPUT=${sample_name}.sorted.bam\
+                        OUTPUT=${sample_name}.dedup.bam \
+                        METRICS_FILE=dup_metrics.txt \
+                        ASSUME_SORTED=true \
+                        VALIDATION_STRINGENCY=SILENT
 
-            samtools index ${sample_name}.bam
-            """
-        } else if (files.size() == 1) {
-            def read1 = files[0]
-            """
-            bwa mem -t ${task.cpus} ${ref} ${read1} \
-              | samtools view -bS | samtools sort -o  ${sample_name}.bam
 
-            samtools index ${sample_name}.bam
-            """
-        }
+
+                    samtools index ${sample_name}.dedup.bam
+
+                    rm ${sample_name}.sorted.bam
+                """
+                
+            } else if (files.size() == 1) {
+                def read1 = files[0]
+                """
+                   bwa mem -M -t ${task.cpus} \
+                     -R "@RG\\tID:${sample_name}\\tSM:${sample_name}\\tPL:ILLUMINA" \
+                     ${ref} ${read1}  \
+                    | samtools view -Sb - \
+                    | samtools sort -@ ${task.cpus} -o ${sample_name}.sorted.bam
+
+                    java -jar /usr/local/bin/picard.jar MarkDuplicates \
+                        INPUT=${sample_name}.sorted.bam\
+                        OUTPUT=${sample_name}.dedup.bam \
+                        METRICS_FILE=dup_metrics.txt \
+                        ASSUME_SORTED=true \
+                        VALIDATION_STRINGENCY=SILENT
+
+
+                    samtools index ${sample_name}.dedup.bam
+
+                    rm ${sample_name}.sorted.bam
+                """
+            }
+
 }
+
+
+
+process run_map_stats {
+    tag "map_stats: ${sample_name}"
+    publishDir "${params.outdir}/stats/picard/${sample_name}", mode: params.mode
+
+    input:
+        tuple val(sample_name), path(bam), path(bai)
+        path ref
+
+    output:
+        path("${sample_name}.wgs_metrics.txt"), emit: wgs
+        path("${sample_name}.alignment_metrics.txt"), emit: align
+        tuple val(sample_name), path("${sample_name}.mean_coverage.txt"), emit: mean
+
+    script:
+        """
+        java -jar /usr/picard/picard.jar \
+        CollectWgsMetrics \
+        I=$bam \
+        O=${sample_name}.wgs_metrics.txt \
+        R=$ref
+
+        java -jar /usr/picard/picard.jar \
+          CollectAlignmentSummaryMetrics \
+          R=$ref \
+          I=$bam \
+          O=${sample_name}.alignment_metrics.txt
+
+
+        grep -v "^#" ${sample_name}.wgs_metrics.txt | awk 'NR==3 {print \$2}'> ${sample_name}.mean_coverage.txt
+
+        """
+}
+process run_samtools_stats{
+    tag "run_samtools_stats: ${sample_name}"
+    publishDir "${params.outdir}/stats/samtools/${sample_name}", mode: params.mode
+
+    input:
+        tuple val(sample_name), path(bam), path(bai)
+
+    output:
+        path("${sample_name}.samtools.txt"), emit: stats
+        path("${sample_name}.flagstat.txt"),  emit: flagstat
+        tuple val(sample_name), path("${sample_name}.rmp.txt"), emit: rmp
+
+    script:
+        """
+        samtools stats ${bam} > ${sample_name}.samtools.txt
+        samtools flagstat ${bam} > ${sample_name}.flagstat.txt
+
+        perc=\$(grep -oP '\\(\\K[0-9]+\\.[0-9]+(?=%)' \
+            ${sample_name}.flagstat.txt | head -n1)
+        if [ -z \"\$perc\" ]; then perc="0.0"; fi
+        echo \"\$perc\" > ${sample_name}.rmp.txt
+
+        """
+}
+
 process run_call_variants {
     tag "call_variants: ${sample_name}"
     publishDir "${params.outdir}/vcf/${sample_name}", mode: params.mode
@@ -130,6 +401,22 @@ process run_call_variants {
         """
 }
 
+process run_bcftools_stats{
+    tag "run_bcftools_stats: ${sample_name}"
+    publishDir "${params.outdir}/stats/bcftools", mode: params.mode
+
+    input:
+        tuple val(sample_name), path(vcf), path(vcf_csi)
+
+    output:
+        path("${sample_name}.bcftools.txt")
+
+    script:
+        """
+        bcftools stats $vcf > ${sample_name}.bcftools.txt
+        """
+}
+
 process run_mosdepth {
     tag "mosdepth: ${sample_name}"
     publishDir "${params.outdir}/stats/mosdepth/${sample_name}", mode: params.mode
@@ -150,7 +437,7 @@ process run_mosdepth {
 
     script:
         """
-        mosdepth --fast-mode $sample_name $bam
+        mosdepth -t ${task.cpus} $sample_name $bam
 
         sort -k2,2nr ${sample_name}.mosdepth.global.dist.txt | awk '\$3>=0.5 {print \$2; exit}' > ${sample_name}.median.txt
 
@@ -194,7 +481,10 @@ process run_spotyping {
         reads = reads.join(" ")
 
         """
-        SpoTyping.py $reads -o $sample_name
+        SpoTyping.py $reads --noQuery -o $sample_name
+        awk -F '\\t' -v OFS='\\t' -v S='${sample_name}' \\
+            'NR==1 {print S, \$2, \$3}' \\
+            ${sample_name} > ${sample_name}.tsv
         """
 }
 
@@ -221,16 +511,16 @@ process run_is6110 {
 
     input:
         tuple val(sample_name), path(read1), path(read2)
-        each IS6110
-        each ref_gbk
+        path is6110
+        path ref_gbk
 
     output:
-        path("$sample_name/*")
+        path("*")
 
     script:
 
         """
-        ismap --reads $read1 $read2 --queries $IS6110 --reference $ref_gbk --bam
+        ismap --reads $read1 $read2 --queries $is6110 --reference $ref_gbk --bam --t ${task.cpus}
         """
 }
 
@@ -286,125 +576,23 @@ process run_drug_resist {
         tb_resistance.py -i $vcf_annotated -o ${sample_name}.drug_resist.csv -d
         """
 }
-params.suffix = 'fastq'
-
-workflow {
-
-    /*  делаем две строки — одну для glob-поиска, вторую для regex-замены  */
-    def globSuffix   = params.suffix                               // в fromPath точек экранировать не нужно
-    def regexSuffix = params.suffix.replaceAll(/\./, '\\\\.')     // а в regex точкам надо экранировать
-
-    reads = Channel
-    .fromPath("${params.reads}*.${globSuffix}", checkIfExists:true)
-    .map { file ->
-        def id = file.name.replaceFirst(/_[12]\.${regexSuffix}$/, '')
-        [ id, file ]
-    }
-    .groupTuple(sort:true)
 
 
-    IS6110 = Channel.fromPath(params.IS6110)
-    ref_gbk = Channel.fromPath(params.ref_gbk)
+process run_multiqc {
+    tag "multiqc"
+    publishDir "${params.outdir}/multiqc", mode: params.mode
 
+    input:
+    path reports
+    path cfg
 
-        
-    
+    output:
+    path "*"
 
-    trimmed = run_fastp(reads).trimmed_reads
-
-    bwa_idx = Channel.fromPath("${params.reference}.*")          // ref/h37rv.fa.*
-          .filter { !it.name.endsWith('.fa') }               // вдруг попала копия .fa
-          .collect()
-
-    ref = Channel.value(file("$params.reference"))
-
-    bam_all = run_mapping(trimmed, bwa_idx, ref)
-
-    cov_all = run_mosdepth(bam_all)
-    
-    
-
-    // ----------------------------------------------------------------
-    // 4) Определяем «хорошие» образцы (медиана > 0)
-    // ----------------------------------------------------------------
-    cov_all.median
-        .map    { id, f -> tuple(id, ((f.text.trim()) ?: '0') as Integer) }
-        .filter { _id, cov -> cov > 5 }
-        .map    { id, _cov -> id }  // берём только первый элемент
-        .set    { GOOD_SAMPLES }         // дублируемый канал
-
-
-    // «плохие» ─ медиана ≤ 0
-    cov_all.median
-        .map    { id, f -> tuple(id, ((f.text.trim()) ?: '0') as Integer) }
-        .filter { _id, cov -> cov <= 5 }
-        .map    { id, _cov -> id }
-        .set    { BAD_SAMPLES }       // новый канал
-
-
-    // results/bad_samples.txt с перезаписью при повторных запусках
-    BAD_SAMPLES
-        .collectFile(
-            name:      'bad_samples_coverage_less_than_5.txt',   // имя результирующего файла
-            storeDir:  params.outdir,       // куда положить
-            newLine:   true,                // добавлять \n между элементами
-            sort:      true               // (опционно) отсортировать
-            )
-
-
-
-
-
-
-    // ----------------------------------------------------------------
-    // 5) Фильтруем trimmed‑reads, BAM и BED
-    // ----------------------------------------------------------------
-    trimmed_good = trimmed
-        .join( GOOD_SAMPLES.map { tuple(it) } )
-        .map  { id, fq_files -> tuple(id, fq_files) }
-
-    bam_good = bam_all
-        .join( GOOD_SAMPLES.map { tuple(it) } )
-        .map  { id, bam_file, bai_file -> tuple(id, bam_file, bai_file) }
-
-    bed_good = cov_all.bed
-        .join( GOOD_SAMPLES.map { tuple(it) } )
-        .map  { id, bed_file -> tuple(id, bed_file) }
-
-
-    run_fastqc(trimmed_good)
-
-    run_spotyping(trimmed_good)
-
-    //single_reads =  reads.filter { id, files -> files.size() == 1 }
-    //    .map    { id, files -> tuple(id, files[0]) }.groupTuple()
-    
-    paired_reads = reads.filter { _id, files -> files.size() == 2 }
-        .map    { id, files ->
-            // упорядочим, чтобы сначала был R1
-            def (r1, r2) = files.sort { it.name }
-            tuple(id, r1, r2)
-        }.join( GOOD_SAMPLES.map { tuple(it) } )
-
-    run_is6110(paired_reads, IS6110, ref_gbk)
-
-
-    rd_db = Channel.value(file(params.rd_db))
-
-    
-
-    run_rd(bed_good, rd_db)
-
-    vcf = run_call_variants(bam_good, ref)
-
-    chr_name = Channel.value(file("scripts/chr.txt"))
-
-    vcf_renamed = run_rename_chromosome(vcf, chr_name)
-    vcf_annotated = run_annotate_vcf(vcf_renamed)
-
-    run_drug_resist(vcf_annotated)
-
-    run_tblg(vcf)
-
-    
+    script:
+    """
+    multiqc --config $cfg --title 'TB-Lite QC' --filename tb_multiqc_report .
+    """
 }
+
+

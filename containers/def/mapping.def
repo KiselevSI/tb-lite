@@ -1,0 +1,21 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%files
+    samblaster-v.0.1.26/samblaster /usr/local/bin/samblaster
+
+%environment
+    export PATH=/usr/local/bin:$PATH
+
+%post
+    # 1) Установка системных зависимостей
+    apt-get update && apt-get install -y --no-install-recommends \
+      bwa samtools \
+    && rm -rf /var/lib/apt/lists/*
+
+    chmod +x /usr/local/bin/samblaster
+
+
+%runscript
+    echo "Этот контейнер содержит bwa, samtools и samblaster."
+    echo "Пример: singularity exec \$0 bwa mem -t 4 ref.fa reads.fq | samblaster | samtools sort -o out.bam -"
