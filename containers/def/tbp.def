@@ -1,0 +1,28 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%files
+    /home/zerg/git/tb-lite/ref/h37rv.fa /ref/h37rv.fa
+
+
+%post
+
+    conda config --add channels defaults
+    conda config --add channels bioconda
+    conda config --add channels conda-forge
+
+    conda create -n tbprof -c bioconda tb-profiler=6.6.5
+    
+    conda clean -afy
+
+    echo ". /opt/conda/etc/profile.d/conda.sh" >> $SINGULARITY_ENVIRONMENT
+    echo "conda activate tbprof" >> $SINGULARITY_ENVIRONMENT
+
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate tbprof
+
+    tb-profiler update_tbdb --match_ref /ref/h37rv.fa
+
+%runscript
+    # при запуске среды уже активирована, просто выполняем tb-profiler
+    exec tb-profiler "$@"

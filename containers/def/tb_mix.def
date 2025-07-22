@@ -1,0 +1,28 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+
+%files
+    /home/zerg/git/tb-lite/scripts/tb_mix.py  /opt/tb_mix.py
+
+%post
+    set -e
+
+    apt-get update \
+      && apt-get install -y --no-install-recommends \
+         build-essential \
+      && rm -rf /var/lib/apt/lists/*
+
+    pip install --no-cache-dir pandas pysam
+
+    chmod +x /opt/tb_mix.py
+    
+    ln -s /opt/tb_mix.py /usr/local/bin/tb_mix.py
+
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export PATH=/opt:$PATH
+    export PYTHONUNBUFFERED=1
+

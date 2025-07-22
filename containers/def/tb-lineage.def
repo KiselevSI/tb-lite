@@ -1,0 +1,35 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+
+%files
+    /home/zerg/git/tb-lite/scripts/pileup_counter.py  /opt/pileup_counter.py
+    /home/zerg/git/tb-lite/scripts/tb-lineage.py /opt/tb-lineage.py
+
+%post
+    set -e
+
+    # Обновляем репозитории и ставим минимальный набор системных пакетов
+    apt-get update \
+      && apt-get install -y --no-install-recommends \
+         build-essential \
+      && rm -rf /var/lib/apt/lists/*
+
+    # Устанавливаем Python-библиотеки
+    pip install --no-cache-dir pandas pysam
+
+    # Делаем скрипт исполняемым и добавляем удобный alias
+    chmod +x /opt/pileup_counter.py
+    chmod +x /opt/tb-lineage.py
+    ln -s /opt/pileup_counter.py /usr/local/bin/pileup_counter.py
+    ln -s /opt/tb-lineage.py /usr/local/bin/tb-lineage.py
+
+######################################################################
+# Переменные окружения, доступные внутри контейнера
+######################################################################
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export PATH=/opt:$PATH
+    export PYTHONUNBUFFERED=1      # мгновенный вывод в консоль
+
