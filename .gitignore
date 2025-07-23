@@ -1,6 +1,6 @@
 .nextflow*
 .vscode
-results
+res*
 work
 data
 *.sif

@@ -45,9 +45,10 @@ workflow {
 
     levels = Channel.value(file("scripts/levels.tsv"))
 
-    run_tb_mix(bam_all, ref, levels)
+    tbmix = run_tb_mix(bam_all, ref, levels)
 
-
+    
+    
     map_stats = run_map_stats(bam_all, ref)
 
     wgs_metrics = map_stats.wgs
@@ -107,7 +108,11 @@ workflow {
     mosdepth_coverage = run_mosdepth(bam_good)
     
 
-    run_spotyping(trimmed_good)
+    spotyping = run_spotyping(trimmed_good).table
+
+
+    run_make_tables(tbmix.collect(),
+        spotyping.collect())
 
     paired_reads = trimmed_good.filter { _id, files -> files.size() == 2 }
             .join( good_samples)
@@ -500,6 +505,7 @@ process run_spotyping {
     output:
         path("$sample_name.*"), emit: other
         path("$sample_name"), emit: code
+        path("${sample_name}.tsv"), emit: table
 
     script:
         def reads = fastq_files instanceof List ? fastq_files : [fastq_files]
@@ -626,13 +632,6 @@ process run_drug_resist {
         """
 }
 
-
-
-
-
-
-
-
 process run_multiqc {
     tag "multiqc"
     publishDir "${params.outdir}/multiqc", mode: params.mode
@@ -650,4 +649,24 @@ process run_multiqc {
     """
 }
 
+process run_make_tables {
+    tag "multiqc"
+    publishDir "${params.outdir}/FINAL_TABLES", mode: params.mode
 
+    input:
+    path(tb_mix)
+    path(spotyping)
+
+    output:
+    path "*"
+
+    script:
+    """
+    awk -F '\\t' '(NR==1) || (FNR>1)' $tb_mix | sed 's/\\t/,/g' > tbmix.total.csv
+    echo "Sample,SpolBin,Spol8" > spotyping.total.csv
+    cat $spotyping | sed 's/\\t/,/g' >> spotyping.total.csv
+
+    csvjoin --no-inference --outer -c Sample tbmix.total.csv spotyping.total.csv | csvcut -C Sample2 > FINAL_TABLE.csv
+
+    """
+}
