@@ -155,10 +155,7 @@ workflow {
 
     multiqc = run_multiqc(multiqc_files.collect().ifEmpty([]), cfg)
 
-    genot = run_make_tables(tbmix.collect(),
-        spotyping.collect())
-
-    run_make_Final_Table(multiqc.report, genot)
+    run_make_Final_Table(multiqc.report, tbmix.collect(), spotyping.collect())
 
 }
 
@@ -613,40 +610,25 @@ process run_multiqc {
     """
 }
 
-process run_make_tables {
-    tag "tbmix and spotyping"
-
-    input:
-    path(tb_mix)
-    path(spotyping)
-
-    output:
-    path "FINAL_TABLE.csv"
-
-    script:
-    """
-    awk -F '\\t' '(NR==1) || (FNR>1)' $tb_mix | sed 's/\\t/,/g' > tbmix.total.csv
-    echo "Sample,SpolBin,Spol8" > spotyping.total.csv
-    cat $spotyping | sed 's/\\t/,/g' >> spotyping.total.csv
-
-    csvjoin --no-inference --outer -c Sample tbmix.total.csv spotyping.total.csv | csvcut -C Sample2 > FINAL_TABLE.csv
-
-    """
-}
-
 process run_make_Final_Table {
     tag "Final Table"
     publishDir "${params.outdir}", mode: params.mode
 
     input:
     path multiqc
-    path tbmix_spoligo
+    path tbmix
+    path spotyping
 
     output:
-    path "FINAL_TABLE.csv"
+    path "FINAL_TABLE.tsv"
 
     script:
     """
-    build_final_table.py -m $multiqc -t $tbmix_spoligo -o FINAL_TABLE.csv
+    awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix | sed 's/\\t/,/g' > tbmix.total.csv
+    echo "Sample,SpolBin,Spol8" > spotyping.total.csv
+    cat $spotyping | sed 's/\\t/,/g' >> spotyping.total.csv
+
+
+    build_final_table.py -m $multiqc -t tbmix.total.csv spotyping.total.csv --str-cols Spol8 -o FINAL_TABLE.tsv
     """
 }

@@ -32,6 +32,37 @@ MODULE_METRICS: Dict[str, List[str]] = {
 }
 
 
+# ----------------- Утилиты для argparse -----------------
+def csv_list(value: str) -> List[str]:
+    """Парсер 'a,b,c' -> ['a','b','c']"""
+    return [x.strip() for x in value.split(",") if x.strip()]
+
+
+def zfill_map(value: str) -> Dict[str, int]:
+    """
+    Парсер 'Spol8:8,Barcode:12' -> {'Spol8': 8, 'Barcode': 12}
+    """
+    out: Dict[str, int] = {}
+    if not value:
+        return out
+    for chunk in value.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if ":" not in chunk:
+            raise argparse.ArgumentTypeError(
+                f"Формат для --zfill-cols: 'col:len,col2:len2', а не '{chunk}'"
+            )
+        col, ln = chunk.split(":", 1)
+        col = col.strip()
+        try:
+            ln = int(ln)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"Длина должна быть числом: '{chunk}'")
+        out[col] = ln
+    return out
+
+
 # ----------------- Аргументы -----------------
 def parse_args():
     p = argparse.ArgumentParser(
@@ -39,26 +70,44 @@ def parse_args():
     )
     p.add_argument("-m", "--multiqc", required=True, help="multiqc_data.json или .json.gz")
     p.add_argument("-t", "--tables", nargs="*", default=[], help="Доп. таблицы (CSV/TSV), можно маски")
-    p.add_argument("-o", "--out", default="FINAL.tsv", help="Выходной TSV")
+    p.add_argument("-o", "--out", default="FINAL_TABLE.tsv", help="Выходной файл (TSV)")
     p.add_argument("--join", default="outer", choices=["outer", "inner", "left", "right"],
-                   help="Тип merge (по умолчанию outer)")
+                   help="Тип объединения (merge how), по умолчанию outer")
+    p.add_argument(
+        "--str-cols",
+        type=csv_list,
+        default=[],
+        help="Колонки (через запятую), которые читать как строки (сохранить ведущие нули)."
+    )
+    p.add_argument(
+        "--zfill-cols",
+        type=zfill_map,
+        default={},
+        help="Дополнять слева нулями указанные колонки: col:len,col2:len2"
+    )
     return p.parse_args()
 
 
 # ----------------- Чтение/парсинг MultiQC -----------------
 def multiqc_to_df(path: Union[str, Path]) -> pd.DataFrame:
     p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Файл не найден: {p}")
+
     opener = gzip.open if p.suffix == ".gz" else open
     with opener(p, "rt", encoding="utf-8") as fh:
         j = json.load(fh)
 
     data = j.get("report_general_stats_data", {})
+    if not isinstance(data, dict):
+        raise ValueError("report_general_stats_data имеет неожиданную структуру")
+
     rows: Dict[str, Dict[str, Union[int, float, str]]] = {}
 
     for module, samples in data.items():
         if module not in MODULE_METRICS:
             continue
-        needed = MODULE_METRICS[module]
+        metrics_needed = MODULE_METRICS[module]
         if not isinstance(samples, dict):
             continue
 
@@ -66,30 +115,49 @@ def multiqc_to_df(path: Union[str, Path]) -> pd.DataFrame:
             if not isinstance(metrics, dict):
                 continue
             row = rows.setdefault(sample, {})
-            for m in needed:
+            for m in metrics_needed:
                 if m in metrics:
-                    # если метрика уже была, добавим префикс модуля, но samtools_3 мы не берём
-                    col = m if col_free(row, m) else f"{module}:{m}"
+                    col = m if m not in row else f"{module}:{m}"
+                    # (samtools_3 не берём, поэтому конфликтов тут почти не будет)
                     row[col] = metrics[m]
 
     df = pd.DataFrame.from_dict(rows, orient="index").reset_index().rename(columns={"index": "ID"})
+    # Переименуем по RENAME_MAP
+    if RENAME_MAP:
+        df = df.rename(columns=RENAME_MAP)
     return df
 
 
-def col_free(row: Dict[str, Union[int, float, str]], name: str) -> bool:
-    """True если такого поля ещё нет в строке."""
-    return name not in row
-
-
 # ----------------- Чтение прочих таблиц -----------------
-def read_table(path: Path) -> pd.DataFrame:
+def read_table(path: Path, str_cols: List[str]) -> pd.DataFrame:
+    """
+    Читаем таблицу. Первую колонку переименуем в 'ID'.
+    Указанные в str_cols читаем как строки (dtype='string'), остальное autodetect.
+    """
+    # dtype только для указанных колонок (кроме ID, её приведём вручную)
+    dtypes = {c: "string" for c in str_cols if c != "ID"}
+
     try:
-        df = pd.read_csv(path, sep=None, engine="python")
+        df = pd.read_csv(
+            path,
+            sep=None,
+            engine="python",
+            dtype=dtypes,
+            keep_default_na=False
+        )
     except Exception:
-        df = pd.read_csv(path, sep="\t")
+        df = pd.read_csv(
+            path,
+            sep="\t",
+            dtype=dtypes,
+            keep_default_na=False
+        )
+
+    # гарантируем, что ID строковый
     first_col = df.columns[0]
     if first_col != "ID":
         df = df.rename(columns={first_col: "ID"})
+    df["ID"] = df["ID"].astype("string")
     return df
 
 
@@ -104,25 +172,27 @@ def main():
 
     # 1) JSON -> DF
     df_mqc = multiqc_to_df(args.multiqc)
+    df_mqc["ID"] = df_mqc["ID"].astype("string")
 
-    # 2) Переименования (заполни RENAME_MAP выше)
-    if RENAME_MAP:
-        df_mqc = df_mqc.rename(columns=RENAME_MAP)
-
-    # 3) Остальные таблицы
+    # 2) Остальные таблицы
     other_paths: List[Path] = []
     for mask in args.tables:
         other_paths.extend(sorted(Path().glob(mask)))
 
     dfs = [df_mqc]
-    for p in other_paths:
-        dfs.append(read_table(p))
+    for pth in other_paths:
+        dfs.append(read_table(pth, args.str_cols))
 
-    # 4) Merge
+    # 3) Merge
     merged = merge_tables(dfs, how=args.join)
 
-    # 5) Save
-    merged.to_csv(args.out, sep=",", index=False)
+    # 4) zfill по запросу
+    for col, width in args.zfill_cols.items():
+        if col in merged.columns:
+            merged[col] = merged[col].astype("string").str.zfill(width)
+
+    # 5) Сохранение
+    merged.to_csv(args.out, sep="\t", index=False)
     print(f"Готово: {args.out}")
 
 
