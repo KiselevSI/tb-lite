@@ -1,7 +1,36 @@
+
 picard_config:                       # ↓ это у вас уже работает
   general_stats_target_coverage: [1, 5, 10, 30, 50]
 
-sample_names_replace_regex: true
-sample_names_replace:
-  "_trimmed_[12]$": ""
+extra_fn_clean_exts:
+  - "_1"
+  - "_2"
+  - "_R1"
+  - "_R2"
+  - "_trimmed_1.fastq.gz"
+  - "_trimmed_2.fastq.gz"
+  - ".dedup.bam"
+  - ".wgs_metrics.txt"
+  - ".alignment_metrics.txt"
+  - ".bcftools.txt"
+  - ".samtools.txt"
 
+# 1. Не превращать большие таблицы в violin-плот
+max_table_rows: 100000          # или любое число больше вашего N образцов
+
+# 2. (MultiQC ≥ 1.27) Никогда не отключать кнопку "Configure Columns"
+table_disable_cols_button_num_columns: 0   # или большое число
+
+table_columns_visible:
+  picard_wgsmetrics-MEAN_COVERAGE: True
+  picard_wgsmetrics-SD_COVERAGE: True
+  bcftools_stats-tstv: False
+  samtools_stats-error_rate: False
+  samtools_stats-non_primary_alignments: False
+  samtools_stats-reads_properly_paired_percent: False
+  samtools_stats-raw_total_sequences: False
+  samtools_stats-reads_mapped: False
+  samtools_stats-reads_mapped_percent: False
+  fastqc-total_sequences: False
+  samtools_flagstat-mapped_passed: False
+  samtools_flagstat-mapped_passed_pct: True

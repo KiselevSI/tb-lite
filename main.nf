@@ -6,7 +6,7 @@ params.rd_db    = "db/RD.bed"
 params.is6110    = "IS6110_db/is6110.fasta"
 params.ref_gbk    = "IS6110_db/h37rv.gbk"
 params.chr_name = "scripts/chr.txt"
-
+params.levels = "scripts/levels.tsv"
 nextflow.enable.dsl = 2 
 
 params.multiqc = "multiqc_config.yaml"
@@ -37,13 +37,14 @@ workflow {
     
     trimmed = run_fastp(reads).trimmed_reads
 
-    bwa_idx = Channel.fromPath("${params.reference}.*").filter { !it.name.endsWith('.fa') }.collect()
+    //bwa_idx = Channel.fromPath("${params.reference}.*").filter { !it.name.endsWith('.fa') }.collect()
+    ref = Channel.value(file(params.reference))
+    bwa_idx = run_bwa_index(ref).index
 
-    ref = Channel.value(file("$params.reference"))
-
+ 
     bam_all = run_mapping(trimmed, bwa_idx, ref).bam
 
-    levels = Channel.value(file("scripts/levels.tsv"))
+    levels = Channel.value(file(params.levels))
 
     tbmix = run_tb_mix(bam_all, ref, levels)
 
@@ -111,8 +112,7 @@ workflow {
     spotyping = run_spotyping(trimmed_good).table
 
 
-    run_make_tables(tbmix.collect(),
-        spotyping.collect())
+    
 
     paired_reads = trimmed_good.filter { _id, files -> files.size() == 2 }
             .join( good_samples)
@@ -147,13 +147,39 @@ workflow {
 
     bcftools_stats = run_bcftools_stats(vcf)
 
-    multiqc_files = wgs_metrics.mix(align_metrics).mix(fastqc_reports).mix(bcftools_stats).mix(samtools_stats.stats).mix(samtools_stats.flagstat)
+    multiqc_files = wgs_metrics.mix(align_metrics)
+    .mix(fastqc_reports)
+    .mix(bcftools_stats)
+    .mix(samtools_stats.stats)
+    .mix(samtools_stats.flagstat)
 
-    run_multiqc(multiqc_files.collect().ifEmpty([]), cfg)
+    multiqc = run_multiqc(multiqc_files.collect().ifEmpty([]), cfg)
+
+    genot = run_make_tables(tbmix.collect(),
+        spotyping.collect())
+
+    run_make_Final_Table(multiqc.report, genot)
 
 }
 
+process run_bwa_index {
+    tag "index reference: $ref"
+    publishDir("${params.outdir}/ref/", mode: params.mode)
+    
+    input:
+    path ref
+    
+    output:
+    path "${ref}.*", emit: index
+    path ref, emit: ref_file
+    script:
 
+    """
+        bwa index $ref
+    """
+
+
+}
 
 
 process run_fastqc {
@@ -215,52 +241,6 @@ process run_fastp {
         fastp -i $read1 -o ${sample_name}_trimmed_1.fastq.gz --trim_poly_g
         """
     }
-}
-
-process run_mapping2 {
-    tag "mapping: $sample_name"
-    publishDir "${params.outdir}/mapped/${sample_name}", mode: params.mode
-
-    input:
-        tuple  val(sample_name), path(fastq_files)
-        path   bwa_index
-        path ref
-
-    output:
-    tuple val(sample_name), path("${sample_name}.dedup.bam"), path("${sample_name}.dedup.bam.bai"), emit: bam
-    path("*")
-
-    script:
-
-        def files = fastq_files instanceof List ? fastq_files : [fastq_files]
-            if (files.size() == 2) {
-                def read1 = files[0]
-                def read2 = files[1]
-                """
-                   bwa mem -t ${task.cpus} \
-                     -R "@RG\\tID:${sample_name}\\tSM:${sample_name}\\tPL:ILLUMINA" \
-                     ${ref} ${read1} ${read2} \
-                    | samblaster \
-                        --removeDups \
-                        --addMateTags \
-                    | samtools sort -@ ${task.cpus} -o ${sample_name}.dedup.bam - \
-                    && samtools index ${sample_name}.dedup.bam
-                """
-                
-            } else if (files.size() == 1) {
-                def read1 = files[0]
-                """
-                   bwa mem -t ${task.cpus} \
-                     -R "@RG\\tID:${sample_name}\\tSM:${sample_name}\\tPL:ILLUMINA" \
-                     ${ref} ${read1}  \
-                    | samblaster \
-                        --removeDups \
-                        --addMateTags \
-                    | samtools sort -@ ${task.cpus} -o ${sample_name}.dedup.bam - \
-                    && samtools index ${sample_name}.dedup.bam
-                """
-            }
-
 }
 
 process run_mapping {
@@ -614,23 +594,6 @@ process run_annotate_vcf{
         """
 }
 
-process run_drug_resist {
-    tag        "drug_resist: $sample_name"
-    publishDir "${params.outdir}/drug_resist/$sample_name", mode: params.mode
-
-    input:
-        tuple val(sample_name), path(vcf_annotated)
-   
-
-    output:
-        path("*")
-
-    script:
-
-        """
-        tb_resistance.py -i $vcf_annotated -o ${sample_name}.drug_resist.csv -d
-        """
-}
 
 process run_multiqc {
     tag "multiqc"
@@ -642,6 +605,7 @@ process run_multiqc {
 
     output:
     path "*"
+    path "tb_multiqc_report_data/multiqc_data.json", emit: report
 
     script:
     """
@@ -650,15 +614,14 @@ process run_multiqc {
 }
 
 process run_make_tables {
-    tag "multiqc"
-    publishDir "${params.outdir}/FINAL_TABLES", mode: params.mode
+    tag "tbmix and spotyping"
 
     input:
     path(tb_mix)
     path(spotyping)
 
     output:
-    path "*"
+    path "FINAL_TABLE.csv"
 
     script:
     """
@@ -668,5 +631,22 @@ process run_make_tables {
 
     csvjoin --no-inference --outer -c Sample tbmix.total.csv spotyping.total.csv | csvcut -C Sample2 > FINAL_TABLE.csv
 
+    """
+}
+
+process run_make_Final_Table {
+    tag "Final Table"
+    publishDir "${params.outdir}", mode: params.mode
+
+    input:
+    path multiqc
+    path tbmix_spoligo
+
+    output:
+    path "FINAL_TABLE.csv"
+
+    script:
+    """
+    build_final_table.py -m $multiqc -t $tbmix_spoligo -o FINAL_TABLE.csv
     """
 }

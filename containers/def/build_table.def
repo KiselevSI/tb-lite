@@ -3,7 +3,7 @@ From: python:3.12-slim
 
 
 %files
-    /home/zerg/git/tb-lite/scripts/tb_mix.py  /opt/tb_mix.py
+    /home/zerg/git/tb-lite/scripts/build_final_table.py  /opt/build_final_table.py 
 
 %post
     set -e
@@ -13,11 +13,11 @@ From: python:3.12-slim
          build-essential procps coreutils gawk grep sed findutils \
       && rm -rf /var/lib/apt/lists/*
 
-    pip install --no-cache-dir pandas pysam
+    pip install --no-cache-dir pandas
 
-    chmod +x /opt/tb_mix.py
-    
-    ln -s /opt/tb_mix.py /usr/local/bin/tb_mix.py
+    chmod +x /opt/build_final_table.py
+
+    ln -s /opt/build_final_table.py /usr/local/bin/build_final_table.py
 
 
 %environment
