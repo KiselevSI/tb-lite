@@ -1,0 +1,8 @@
+# .dockerignore
+*.fastq.gz
+*.bam
+*.vcf.gz
+results/
+data/
+*.log
+*.nextflow.log*

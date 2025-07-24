@@ -9,13 +9,13 @@ params.chr_name = "scripts/chr.txt"
 params.levels = "scripts/levels.tsv"
 nextflow.enable.dsl = 2 
 
-params.multiqc = "multiqc_config.yaml"
+params.multiqc = "scripts/multiqc_config.yaml"
 
 params.min_align_pct  = 80
 params.min_mean_cov   = 10
 params.min_median   = 10
 
-params.samples = "sample.csv"
+params.samples = "samplesheet2.csv"
 
 workflow {
 
@@ -132,7 +132,7 @@ workflow {
 
     vcf = run_call_variants(bam_good, ref)
 
-    run_tb_profiler_dr(vcf)
+    drugs = run_tb_profiler_dr(vcf).results
 
     chr_name = Channel.value(file(params.chr_name))
 
@@ -141,7 +141,7 @@ workflow {
 
     //run_drug_resist(vcf_annotated)
 
-    run_tblg(vcf)
+    tblg_table = run_tblg(vcf)
 
     cfg = Channel.fromPath(params.multiqc)
 
@@ -155,7 +155,7 @@ workflow {
 
     multiqc = run_multiqc(multiqc_files.collect().ifEmpty([]), cfg)
 
-    run_make_Final_Table(multiqc.report, tbmix.collect(), spotyping.collect())
+    run_make_Final_Table(multiqc.report, tbmix.collect(), spotyping.collect(), tblg_table.collect(), drugs.collect())
 
 }
 
@@ -399,12 +399,12 @@ process run_call_variants {
     script:
         """
         bcftools mpileup --threads ${task.cpus} \
-            --min-MQ 10 --ignore-overlaps --max-depth 3000 \
+            --min-MQ 30 --ignore-overlaps --max-depth 3000 \
             -f ${ref} ${bam} -Ou | \
         bcftools call --threads ${task.cpus} --multiallelic-caller \
             --ploidy 1 --variants-only -Ou - | \
         bcftools view --threads ${task.cpus} \
-            --include 'DP>10' -Oz -o ${sample_name}.vcf.gz
+            --include 'QUAL>20 && DP>10' -Oz -o ${sample_name}.vcf.gz
         bcftools index ${sample_name}.vcf.gz
         """
 }
@@ -545,12 +545,13 @@ process run_tb_profiler_dr {
         tuple val(sample_name), path(vcf), path(vcf_csi)
 
     output:
-        path("*")
+        path("*"), emit: other
+        path("results/${sample_name}.results.json"), emit: results
 
     script:
 
         """
-        tb-profiler profile --vcf $vcf -p $sample_name --csv --txt
+        tb-profiler profile --vcf $vcf -p $sample_name --txt
         """
 }
 
@@ -618,17 +619,31 @@ process run_make_Final_Table {
     path multiqc
     path tbmix
     path spotyping
+    path tblg_table
+    path drugs
 
     output:
     path "FINAL_TABLE.tsv"
+    path "tbmix.total.tsv"
+    path "spotyping.total.tsv"
+    path "tblg.total.tsv"
+    path "dr.tsv"
+    
 
     script:
     """
-    awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix | sed 's/\\t/,/g' > tbmix.total.csv
-    echo "Sample,SpolBin,Spol8" > spotyping.total.csv
-    cat $spotyping | sed 's/\\t/,/g' >> spotyping.total.csv
+    awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
+    echo -e "Sample\\tSpolBin\\tSpol8" > spotyping.total.tsv
+    cat $spotyping  >> spotyping.total.tsv
+
+    awk -F '\\t' '(NR==1) || (FNR>1)' $tblg_table  > tblg.total.tsv
+
+    filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
+
+    dr_parser.py $drugs -o dr.tsv
 
 
-    build_final_table.py -m $multiqc -t tbmix.total.csv spotyping.total.csv --str-cols Spol8 -o FINAL_TABLE.tsv
+
+    build_final_table.py -m $multiqc -t spotyping.total.tsv filter.tbmix.tsv dr.tsv --str-cols Spol8 -o FINAL_TABLE.tsv --comma-cols MEAN_COVERAGE,MEDIAN_COVERAGE,SD_COVERAGE,PCT_1X,PCT_5X,PCT_10X,PCT_30X,PCT_50X,reads_mapped_percent,percent_gc,avg_sequence_length
     """
 }

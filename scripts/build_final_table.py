@@ -11,187 +11,142 @@ from typing import Dict, List, Union
 import pandas as pd
 
 
-# ======= НАСТРОЙКИ ПОЛЕЙ (впиши свои имена) =======
+# ----------------- кастомные настройки -----------------
 RENAME_MAP: Dict[str, str] = {
-    "number_of_records": "Vars",
-    "number_of_SNPs": "SNP",
-    "number_of_indels": "Indel",
-    # Пример:
-    # "reads_mapped_percent": "Mapped_%"
+    # пример: "reads_mapped_percent": "MappedPercent",
 }
 
-
-# Какие метрики берём из каких модулей
 MODULE_METRICS: Dict[str, List[str]] = {
-    "samtools":   ["reads_mapped_percent"],
-    # "samtools_3": ["reads_mapped_percent"],  # <-- НЕ ИСПОЛЬЗУЕМ
-    "bcftools":   ["number_of_records", "number_of_SNPs", "number_of_indels"],
-    "picard":     ["MEAN_COVERAGE", "MEDIAN_COVERAGE", "SD_COVERAGE", 
-                   "PCT_1X", "PCT_5X", "PCT_10X", "PCT_30X", "PCT_50X"],
-    "fastqc":     ["percent_gc", "avg_sequence_length", "percent_duplicates"],
+    "samtools": ["reads_mapped_percent"],
+    "bcftools": ["number_of_records", "number_of_SNPs", "number_of_indels"],
+    "picard": [
+        "MEAN_COVERAGE", "SD_COVERAGE", "MEDIAN_COVERAGE",
+        "PCT_1X", "PCT_5X", "PCT_10X", "PCT_30X", "PCT_50X"
+    ],
+    "fastqc": ["percent_gc", "avg_sequence_length"],
 }
 
 
-# ----------------- Утилиты для argparse -----------------
-def csv_list(value: str) -> List[str]:
-    """Парсер 'a,b,c' -> ['a','b','c']"""
-    return [x.strip() for x in value.split(",") if x.strip()]
+# ----------------- argparse helpers -----------------
+def csv_list(v: str) -> list[str]:
+    return [x.strip() for x in v.split(",") if x.strip()]
 
 
-def zfill_map(value: str) -> Dict[str, int]:
-    """
-    Парсер 'Spol8:8,Barcode:12' -> {'Spol8': 8, 'Barcode': 12}
-    """
+def zfill_map(v: str) -> Dict[str, int]:
     out: Dict[str, int] = {}
-    if not value:
+    if not v:
         return out
-    for chunk in value.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        if ":" not in chunk:
-            raise argparse.ArgumentTypeError(
-                f"Формат для --zfill-cols: 'col:len,col2:len2', а не '{chunk}'"
-            )
+    for chunk in v.split(","):
         col, ln = chunk.split(":", 1)
-        col = col.strip()
-        try:
-            ln = int(ln)
-        except ValueError:
-            raise argparse.ArgumentTypeError(f"Длина должна быть числом: '{chunk}'")
-        out[col] = ln
+        out[col.strip()] = int(ln)
     return out
 
 
-# ----------------- Аргументы -----------------
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Собрать таблицу из MultiQC JSON и объединить с другими таблицами по первой колонке."
-    )
-    p.add_argument("-m", "--multiqc", required=True, help="multiqc_data.json или .json.gz")
-    p.add_argument("-t", "--tables", nargs="*", default=[], help="Доп. таблицы (CSV/TSV), можно маски")
-    p.add_argument("-o", "--out", default="FINAL_TABLE.tsv", help="Выходной файл (TSV)")
-    p.add_argument("--join", default="outer", choices=["outer", "inner", "left", "right"],
-                   help="Тип объединения (merge how), по умолчанию outer")
-    p.add_argument(
-        "--str-cols",
-        type=csv_list,
-        default=[],
-        help="Колонки (через запятую), которые читать как строки (сохранить ведущие нули)."
-    )
-    p.add_argument(
-        "--zfill-cols",
-        type=zfill_map,
-        default={},
-        help="Дополнять слева нулями указанные колонки: col:len,col2:len2"
-    )
-    return p.parse_args()
+# ----------------- форматирование чисел -----------------
+def format_with_comma(val: Union[int, float, str, None]) -> str:
+    """
+    -> '1 234,56' (два знака, запятая вместо точки, '' для NaN/None/пустого).
+    Используем не‑разрывный пробел для тысяч, чтобы не конфликтовать с табами/запятой.
+    """
+    if val == "" or val is None:
+        return ""
+    try:
+        num = float(val)
+    except ValueError:
+        return str(val)
+    return f"{num:,.2f}".replace(",", " ").replace(".", ",")  # U+202F narrow no‑break space
 
 
-# ----------------- Чтение/парсинг MultiQC -----------------
+# ----------------- MultiQC → DataFrame -----------------
 def multiqc_to_df(path: Union[str, Path]) -> pd.DataFrame:
     p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"Файл не найден: {p}")
-
     opener = gzip.open if p.suffix == ".gz" else open
     with opener(p, "rt", encoding="utf-8") as fh:
         j = json.load(fh)
 
     data = j.get("report_general_stats_data", {})
-    if not isinstance(data, dict):
-        raise ValueError("report_general_stats_data имеет неожиданную структуру")
-
     rows: Dict[str, Dict[str, Union[int, float, str]]] = {}
 
     for module, samples in data.items():
         if module not in MODULE_METRICS:
             continue
-        metrics_needed = MODULE_METRICS[module]
-        if not isinstance(samples, dict):
-            continue
-
+        need = MODULE_METRICS[module]
         for sample, metrics in samples.items():
-            if not isinstance(metrics, dict):
-                continue
             row = rows.setdefault(sample, {})
-            for m in metrics_needed:
+            for m in need:
                 if m in metrics:
                     col = m if m not in row else f"{module}:{m}"
-                    # (samtools_3 не берём, поэтому конфликтов тут почти не будет)
                     row[col] = metrics[m]
 
-    df = pd.DataFrame.from_dict(rows, orient="index").reset_index().rename(columns={"index": "ID"})
-    # Переименуем по RENAME_MAP
-    if RENAME_MAP:
-        df = df.rename(columns=RENAME_MAP)
+    df = (
+        pd.DataFrame.from_dict(rows, orient="index")
+        .reset_index()
+        .rename(columns={"index": "ID"})
+        .astype({"ID": "string"})
+        .rename(columns=RENAME_MAP or {})
+    )
     return df
 
 
-# ----------------- Чтение прочих таблиц -----------------
-def read_table(path: Path, str_cols: List[str]) -> pd.DataFrame:
-    """
-    Читаем таблицу. Первую колонку переименуем в 'ID'.
-    Указанные в str_cols читаем как строки (dtype='string'), остальное autodetect.
-    """
-    # dtype только для указанных колонок (кроме ID, её приведём вручную)
+# ----------------- Таблицы CSV/TSV -----------------
+def read_table(path: Path, str_cols: list[str]) -> pd.DataFrame:
     dtypes = {c: "string" for c in str_cols if c != "ID"}
-
-    try:
-        df = pd.read_csv(
-            path,
-            sep=None,
-            engine="python",
-            dtype=dtypes,
-            keep_default_na=False
-        )
-    except Exception:
-        df = pd.read_csv(
-            path,
-            sep="\t",
-            dtype=dtypes,
-            keep_default_na=False
-        )
-
-    # гарантируем, что ID строковый
-    first_col = df.columns[0]
-    if first_col != "ID":
-        df = df.rename(columns={first_col: "ID"})
+    df = pd.read_csv(path, sep=None, engine="python", dtype=dtypes, keep_default_na=False)
+    first = df.columns[0]
+    if first != "ID":
+        df = df.rename(columns={first: "ID"})
     df["ID"] = df["ID"].astype("string")
     return df
 
 
-# ----------------- Merge -----------------
-def merge_tables(dfs: List[pd.DataFrame], how: str = "outer") -> pd.DataFrame:
+# ----------------- Merge util -----------------
+def merge_tables(dfs: list[pd.DataFrame], how: str = "outer") -> pd.DataFrame:
     return reduce(lambda l, r: pd.merge(l, r, on="ID", how=how), dfs)
 
 
 # ----------------- main -----------------
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="Собрать таблицу из MultiQC JSON и объединить с другими таблицами."
+    )
+    p.add_argument("-m", "--multiqc", required=True)
+    p.add_argument("-t", "--tables", nargs="*", default=[])
+    p.add_argument("-o", "--out", default="FINAL_TABLE.tsv")
+    p.add_argument("--join", default="outer", choices=["outer", "inner", "left", "right"])
+    p.add_argument("--str-cols", type=csv_list, default=[],
+                   help="Колонки читать как строки (сохраняют ведущие нули)")
+    p.add_argument("--zfill-cols", type=zfill_map, default={},
+                   help="Дополнить слева нулями: col:len,col2:len2")
+    p.add_argument("--comma-cols", type=csv_list, default=[],
+                   help="Колонки, где точку заменить на запятую и оставить 2 знака")
+    return p.parse_args()
+
+
 def main():
     args = parse_args()
 
-    # 1) JSON -> DF
     df_mqc = multiqc_to_df(args.multiqc)
-    df_mqc["ID"] = df_mqc["ID"].astype("string")
-
-    # 2) Остальные таблицы
-    other_paths: List[Path] = []
-    for mask in args.tables:
-        other_paths.extend(sorted(Path().glob(mask)))
-
     dfs = [df_mqc]
-    for pth in other_paths:
+
+    # остальные таблицы
+    paths: list[Path] = []
+    for mask in args.tables:
+        paths.extend(sorted(Path().glob(mask)))
+    for pth in paths:
         dfs.append(read_table(pth, args.str_cols))
 
-    # 3) Merge
     merged = merge_tables(dfs, how=args.join)
 
-    # 4) zfill по запросу
+    # zfill
     for col, width in args.zfill_cols.items():
-        if col in merged.columns:
+        if col in merged:
             merged[col] = merged[col].astype("string").str.zfill(width)
 
-    # 5) Сохранение
+    # comma‑format
+    for col in args.comma_cols:
+        if col in merged:
+            merged[col] = merged[col].apply(format_with_comma)
+
     merged.to_csv(args.out, sep="\t", index=False)
     print(f"Готово: {args.out}")
 
