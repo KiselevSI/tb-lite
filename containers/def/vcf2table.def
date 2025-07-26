@@ -1,0 +1,31 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+
+%files
+    /home/zerg/git/tb-lite/scripts/merge_vcf.py  /opt/merge_vcf.py
+    /home/zerg/git/tb-lite/scripts/vcf2table.py  /opt/vcf2table.py
+
+%post
+    set -e
+
+    apt-get update \
+      && apt-get install -y --no-install-recommends \
+         build-essential procps coreutils gawk grep sed findutils \
+      && rm -rf /var/lib/apt/lists/*
+
+    pip install --no-cache-dir pandas pysam xlsxwriter openpyxl
+
+    chmod +x /opt/merge_vcf.py
+    chmod +x /opt/vcf2table.py
+
+    ln -s /opt/merge_vcf.py /usr/local/bin/merge_vcf.py
+    ln -s /opt/vcf2table.py /usr/local/bin/vcf2table.py
+
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export PATH=/opt:$PATH
+    export PYTHONUNBUFFERED=1
+

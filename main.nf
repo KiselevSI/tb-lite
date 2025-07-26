@@ -132,7 +132,9 @@ workflow {
 
     run_rd(mosdepth_coverage.bed, rd_db)
 
-    vcf = run_call_variants(bam_good, ref)
+    call_variants = run_call_variants(bam_good, ref)
+    vcf = call_variants.other
+    vcfs = call_variants.vcfs
 
     drugs = run_tb_profiler_dr(vcf).results
 
@@ -158,6 +160,13 @@ workflow {
     multiqc = run_multiqc(multiqc_files.collect().ifEmpty([]), cfg)
 
     run_make_Final_Table(multiqc.report, tbmix.collect(), spotyping.collect(), tblg_table.collect(), drugs.collect())
+
+    //VCF2TABLE
+    merged_vcf = run_merge_vcf(vcfs.collect())
+    renamed_vcf = run_rename_chromosome_merge_vcf(merged_vcf, chr_name)
+    merged_vcf_annotated = run_annotation_merge_vcf(renamed_vcf)
+    feature_table = Channel.value(file("scripts/feature_table.tsv"))
+    run_vcf2table(vcfs.collect(), merged_vcf_annotated, feature_table)
 
 }
 
@@ -396,7 +405,8 @@ process run_call_variants {
         
 
     output:
-        tuple val(sample_name), path("${sample_name}.vcf.gz"), path("${sample_name}.vcf.gz.csi")
+        tuple val(sample_name), path("${sample_name}.vcf.gz"), path("${sample_name}.vcf.gz.csi"), emit:other
+        path("${sample_name}.vcf.gz"), emit:vcfs
 
     script:
         """
@@ -410,6 +420,83 @@ process run_call_variants {
         bcftools index ${sample_name}.vcf.gz
         """
 }
+
+process run_merge_vcf {
+    tag "run_merge_vcf"
+    publishDir "${params.outdir}/TABLE_ANNOTATION", mode: params.mode
+
+    input:
+        path vcfs
+        
+
+    output:
+        path("merged.vcf")
+
+    script:
+        """
+        merge_vcf.py -v $vcfs -o merged.vcf
+        """
+}
+
+process run_rename_chromosome_merge_vcf {
+    tag "run_rename_chromosome_merge_vcf"
+    publishDir "${params.outdir}/TABLE_ANNOTATION", mode: params.mode
+    
+
+    input:
+        path(vcf)
+        path chromosome_name
+        
+
+    output:
+        path("merged_vcf.renamed_chromosome.vcf")
+
+    script:
+
+        """
+        bcftools annotate --rename-chrs $chromosome_name $vcf -o merged_vcf.renamed_chromosome.vcf
+        """
+}
+
+process run_vcf2table {
+    tag "run_rename_chromosome_merge_vcf"
+    publishDir "${params.outdir}/TABLE_ANNOTATION", mode: params.mode
+    
+
+    input:
+        path(vcfs)
+        path vcf_ann
+        path feature_table
+        
+
+    output:
+        path("ANNOTATION_TABLE.xlsx")
+
+    script:
+
+        """
+        vcf2table.py -v $vcfs -a $vcf_ann -t $feature_table -o ANNOTATION_TABLE.xlsx
+        """
+}
+
+
+process run_annotation_merge_vcf {
+    tag "run_annotation_merge_vcf"
+    publishDir "${params.outdir}/TABLE_ANNOTATION", mode: params.mode
+
+    input:
+        path merged_vcf
+        
+
+    output:
+        path("merged.annotation.vcf")
+
+    script:
+        """
+        snpEff ann -noLog -noStats -no-downstream -no-upstream -no-utr -v Mycobacterium_tuberculosis_h37rv $merged_vcf > merged.annotation.vcf
+        """
+}
+
 
 process run_bcftools_stats{
     tag "run_bcftools_stats: ${sample_name}"
@@ -580,6 +667,7 @@ process run_rename_chromosome {
 
 process run_annotate_vcf{
     tag        "drug_resist: $sample_name"
+    publishDir "${params.outdir}/annotate_vcf", mode: params.mode
 
     input:
         tuple val(sample_name), path(vcf_renamed)        
@@ -590,7 +678,7 @@ process run_annotate_vcf{
     script:
 
         """
-        java -jar /snpEff.jar ann -v Mycobacterium_tuberculosis_h37rv $vcf_renamed | bgzip -c > ${sample_name}.annotated.vcf.gz
+        snpEff ann -noLog -noStats -no-downstream -no-upstream -no-utr -v Mycobacterium_tuberculosis_h37rv $vcf_renamed | bgzip -c > ${sample_name}.annotated.vcf.gz
         """
 }
 
