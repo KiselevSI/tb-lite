@@ -15,7 +15,7 @@ params.min_align_pct  = 80
 params.min_mean_cov   = 10
 params.min_median   = 10
 
-params.samples = "samplesheet2.csv"
+params.samples = "run.csv"
 
 workflow {
 
@@ -33,9 +33,11 @@ workflow {
           tuple(sample, fq_list)          // итоговый элемент канала
       }
 
-    fastqc_reports = run_fastqc(reads)
+    
     
     trimmed = run_fastp(reads).trimmed_reads
+
+    fastqc_reports = run_fastqc(trimmed)
 
     //bwa_idx = Channel.fromPath("${params.reference}.*").filter { !it.name.endsWith('.fa') }.collect()
     ref = Channel.value(file(params.reference))
@@ -319,7 +321,7 @@ process run_tb_mix {
 
     script:
         """
-        tb_mix.py -i $bam -r $ref -l $levels --mq 30 --bq 20 -f 0.05 -p $sample_name -o ${sample_name}.mix.tsv
+        tb_mix.py -i $bam -r $ref -l $levels --mq 30 --bq 20 -f 0.04 -p $sample_name -o ${sample_name}.mix.tsv --mix-low 0.05 --mix-high 0.95               
 
         """
 }
@@ -343,7 +345,7 @@ process run_map_stats {
     script:
         """
         java -jar /usr/picard/picard.jar \
-        CollectWgsMetrics \
+        CollectWgsMetrics COVERAGE_CAP=100000 \
         I=$bam \
         O=${sample_name}.wgs_metrics.txt \
         R=$ref COUNT_UNPAIRED=true
@@ -623,11 +625,11 @@ process run_make_Final_Table {
     path drugs
 
     output:
-    path "FINAL_TABLE.tsv"
+    path "FINAL_TABLE.xlsx"
     path "tbmix.total.tsv"
     path "spotyping.total.tsv"
     path "tblg.total.tsv"
-    path "dr.tsv"
+    path "dr.xlsx"
     
 
     script:
@@ -640,10 +642,8 @@ process run_make_Final_Table {
 
     filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
-    dr_parser.py $drugs -o dr.tsv
+    dr_parser.py $drugs -o dr.xlsx
 
-
-
-    build_final_table.py -m $multiqc -t spotyping.total.tsv filter.tbmix.tsv dr.tsv --str-cols Spol8 -o FINAL_TABLE.tsv --comma-cols MEAN_COVERAGE,MEDIAN_COVERAGE,SD_COVERAGE,PCT_1X,PCT_5X,PCT_10X,PCT_30X,PCT_50X,reads_mapped_percent,percent_gc,avg_sequence_length
+    build_final_table.py -m $multiqc --dr dr.xlsx -t spotyping.total.tsv filter.tbmix.tsv tblg.total.tsv tbmix.total.tsv --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
     """
 }

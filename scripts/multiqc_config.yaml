@@ -2,21 +2,14 @@
 picard_config:                       # ↓ это у вас уже работает
   general_stats_target_coverage: [1, 5, 10, 30, 50]
 
-extra_fn_clean_exts:
-  - "_1"
-  - "_2"
-  - "_R1"
-  - "_R2"
-  - "_trimmed_1.fastq.gz"
-  - "_trimmed_2.fastq.gz"
-  - ".dedup.bam"
-  - ".wgs_metrics.txt"
-  - ".alignment_metrics.txt"
-  - ".bcftools.txt"
-  - ".samtools.txt"
+
 
 # 1. Не превращать большие таблицы в violin-плот
 max_table_rows: 100000          # или любое число больше вашего N образцов
+
+extra_fn_clean_exts:
+  - "_trimmed_1"
+  - "_trimmed_2"
 
 # 2. (MultiQC ≥ 1.27) Никогда не отключать кнопку "Configure Columns"
 table_disable_cols_button_num_columns: 0   # или большое число
