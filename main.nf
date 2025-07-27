@@ -713,17 +713,15 @@ process run_make_Final_Table {
     path drugs
 
     output:
-    path "FINAL_TABLE.xlsx"
-    path "tbmix.total.tsv"
-    path "spotyping.total.tsv"
-    path "tblg.total.tsv"
-    path "dr.xlsx"
+    path "*"
     
 
     script:
     """
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
+
     echo -e "Sample\\tSpolBin\\tSpol8" > spotyping.total.tsv
+
     cat $spotyping  >> spotyping.total.tsv
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tblg_table  > tblg.total.tsv
@@ -731,7 +729,8 @@ process run_make_Final_Table {
     filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
     dr_parser.py $drugs -o dr.xlsx
-
+  
     build_final_table.py -m $multiqc --dr dr.xlsx -t spotyping.total.tsv filter.tbmix.tsv tblg.total.tsv tbmix.total.tsv --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
+
     """
 }

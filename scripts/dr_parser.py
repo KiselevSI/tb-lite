@@ -4,10 +4,15 @@
 с расширенными колонками для каждой группы лекарств в Excel со многоуровневой шапкой:
   <Drug>  →  gene_name | Mutation | Freq
 
+Изменение по просьбе пользователя:
+- Вместо жёлтой заливки для вариантов с confidence == "Uncertain significance"
+  рядом со значением мутации в колонке **Mutation** дописывается метка
+  "[Uncertain significance]".
+
 Правила:
 - Включаем варианты с confidence == "Assoc w R" ИЛИ "Uncertain significance".
-- Для "Uncertain significance" ячейки соответствующих колонок gene_name/Mutation/Freq
-  выделяются жёлтой заливкой.
+- Для "Uncertain significance" в колонке Mutation после конкретной мутации
+  добавляется строка " [Uncertain significance]".
 - Частота берётся из dr_variants[i].freq.
 - В Excel шапка из 2 строк, индекс НЕ записываем, пустой первый столбец отсутствует.
 
@@ -33,7 +38,7 @@ from typing import Dict, List, Tuple, Any
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 DRUGS: List[str] = [
@@ -60,7 +65,6 @@ DRUGS: List[str] = [
 # соответствие «имя из JSON → имя колонки» (нижний регистр)
 JSON2COL: Dict[str, str] = {d.lower(): d for d in DRUGS}
 
-# итоговый порядок колонок
 # итоговая структура колонок: двухуровневые заголовки для Excel
 # Верхний уровень: название препарата (для колонки Sample — пусто)
 # Нижний уровень: gene_name / Mutation / Freq
@@ -70,7 +74,7 @@ for drug in DRUGS:
     TOP.extend([drug, drug, drug])
     BOTTOM.extend(["gene_name", "Mutation", "Freq"])
 
-COLUMNS = pd.MultiIndex.from_arrays([TOP, BOTTOM])  # используется только для построения DF; запись в Excel — вручную.from_arrays([TOP, BOTTOM])  # используется только для построения DF; запись в Excel — вручную
+COLUMNS = pd.MultiIndex.from_arrays([TOP, BOTTOM])
 
 
 def _to_str(x: Any) -> str:
@@ -82,9 +86,9 @@ def _to_str(x: Any) -> str:
     return str(x)
 
 
-def parse_file(path: Path) -> Tuple[str, Dict[str, str] | Dict[str, List[str]], Dict[str, bool], int]:
-    """Разобрать JSON и вернуть sample_id, агрегированные значения по препаратам,
-    маску наличия неопределённых вариантов и число other_variants.
+def parse_file(path: Path) -> Tuple[str, Dict[str, str], int]:
+    """Разобрать JSON и вернуть sample_id, агрегированные значения по препаратам
+    и число other_variants.
     """
     with path.open() as f:
         data = json.load(f)
@@ -94,25 +98,24 @@ def parse_file(path: Path) -> Tuple[str, Dict[str, str] | Dict[str, List[str]], 
     genes: Dict[str, List[str]] = {drug: [] for drug in DRUGS}
     muts: Dict[str, List[str]] = {drug: [] for drug in DRUGS}
     freqs: Dict[str, List[str]] = {drug: [] for drug in DRUGS}
-    uncertain_present: Dict[str, bool] = {drug: False for drug in DRUGS}
 
     for var in data.get("dr_variants", []):
         for drug_info in var.get("drugs", []):
             drug_json = (drug_info.get("drug", "") or "").lower()
             if drug_json not in JSON2COL:
                 continue
-            conf = drug_info.get("confidence", "").strip()
+            conf = (drug_info.get("confidence", "") or "").strip()
             if conf not in {"Assoc w R", "Uncertain significance"}:
                 continue
             drug = JSON2COL[drug_json]
 
-            if conf == "Uncertain significance":
-                uncertain_present[drug] = True
-
             if (gn := var.get("gene_name")):
                 genes[drug].append(str(gn))
             if (mut := drug_info.get("original_mutation")):
-                muts[drug].append(str(mut))
+                if conf == "Uncertain significance":
+                    muts[drug].append(f"{mut} [Uncertain significance]")
+                else:
+                    muts[drug].append(str(mut))
             if (fq := var.get("freq")) is not None and fq != "":
                 freqs[drug].append(_to_str(fq))
 
@@ -125,14 +128,13 @@ def parse_file(path: Path) -> Tuple[str, Dict[str, str] | Dict[str, List[str]], 
         row[f"{drug}__Mutation"] = "; ".join(muts[drug])
         row[f"{drug}__Freq"] = "; ".join(freqs[drug])
 
-    return sample_id, row, uncertain_present, other_variants_count
+    return sample_id, row, other_variants_count
 
 
-def build_dataframe(json_files: List[str]) -> Tuple[pd.DataFrame, List[Dict[str, bool]]]:
+def build_dataframe(json_files: List[str]) -> pd.DataFrame:
     rows_out: List[List[str]] = []
-    masks: List[Dict[str, bool]] = []
     for fp in json_files:
-        sample_id, parsed, mask, other_cnt = parse_file(Path(fp))
+        sample_id, parsed, other_cnt = parse_file(Path(fp))
         row_list: List[str] = [sample_id, str(other_cnt)]
         for drug in DRUGS:
             row_list.extend([
@@ -141,12 +143,11 @@ def build_dataframe(json_files: List[str]) -> Tuple[pd.DataFrame, List[Dict[str,
                 parsed[f"{drug}__Freq"],
             ])
         rows_out.append(row_list)
-        masks.append(mask)
     df = pd.DataFrame(rows_out, columns=COLUMNS)
-    return df, masks
+    return df
 
 
-def write_excel(path: Path, df: pd.DataFrame, masks: List[Dict[str, bool]]) -> None:
+def write_excel(path: Path, df: pd.DataFrame) -> None:
     wb = Workbook()
     ws = wb.active
     ws.title = "DR"
@@ -163,7 +164,7 @@ def write_excel(path: Path, df: pd.DataFrame, masks: List[Dict[str, bool]]) -> N
     ws.cell(row=row1, column=col, value="")  # пусто над Other Variants
     col += 1
     for drug in DRUGS:
-        ws.merge_cells(start_row=row1, start_column=col, end_row=row1, end_column=col+2)
+        ws.merge_cells(start_row=row1, start_column=col, end_row=row1, end_column=col + 2)
         c = ws.cell(row=row1, column=col, value=drug)
         c.alignment = header_align
         c.font = header_font
@@ -183,28 +184,20 @@ def write_excel(path: Path, df: pd.DataFrame, masks: List[Dict[str, bool]]) -> N
             c.font = header_font
             col += 1
 
-    # 3) Данные — без пустых строк.
-    yellow_fill = PatternFill(fill_type="solid", fgColor="FFFF99")  # мягкий жёлтый
-
+    # 3) Данные
     for r, (_, row) in enumerate(df.iterrows(), start=3):
         ws.cell(row=r, column=1, value=row[("", "Sample")])
-        # число other_variants
         ws.cell(row=r, column=2, value=row[("", "Other Variants")])
         col = 3
-        mask = masks[r-3]
         for drug in DRUGS:
             g = row[(drug, "gene_name")]
             m = row[(drug, "Mutation")]
             f = row[(drug, "Freq")]
-            for val in (g, m, f):
-                ws.cell(row=r, column=col, value=val)
-                col += 1
-            if mask.get(drug, False):
-                # окрасить три последние записанные ячейки
-                for cc in range(col-3, col):
-                    ws.cell(row=r, column=cc).fill = yellow_fill
+            ws.cell(row=r, column=col, value=g); col += 1
+            ws.cell(row=r, column=col, value=m); col += 1
+            ws.cell(row=r, column=col, value=f); col += 1
 
-    # Авто-ширина (примерная)
+    # Примерная авто-ширина
     for c in range(1, ws.max_column + 1):
         maxlen = 0
         for r in range(1, ws.max_row + 1):
@@ -224,7 +217,7 @@ def main() -> None:
             "для каждого препарата gene_name/Mutation/Freq. В таблицу попадают "
             "варианты с confidence = 'Assoc w R' и 'Uncertain significance'. "
             "Частота берётся из dr_variants[].freq. Для 'Uncertain significance' "
-            "ячейки подсвечиваются жёлтым."
+            "в колонке Mutation добавляется пометка '[Uncertain significance]'."
         )
     )
     parser.add_argument(
@@ -236,10 +229,10 @@ def main() -> None:
     parser.add_argument("json_files", nargs="+", help="Входные файлы *.json")
     args = parser.parse_args()
 
-    df, masks = build_dataframe(args.json_files)
+    df = build_dataframe(args.json_files)
 
     out_path = Path(args.output or "result.xlsx")
-    write_excel(out_path, df, masks)
+    write_excel(out_path, df)
     print(f"Saved: {out_path}")
 
 
