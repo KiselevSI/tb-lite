@@ -728,9 +728,10 @@ process run_make_Final_Table {
 
     filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
-    dr_parser.py $drugs -o dr.xlsx
+    dr_parser.py -i $drugs -o dr.xlsx
   
     build_final_table.py -m $multiqc --dr dr.xlsx -t spotyping.total.tsv filter.tbmix.tsv tblg.total.tsv tbmix.total.tsv --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
 
+    
     """
 }
