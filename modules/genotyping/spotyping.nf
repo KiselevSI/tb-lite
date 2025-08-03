@@ -1,0 +1,24 @@
+process SPOTYPING {
+    tag        "SpoTyping: $sample_name"
+    publishDir "${params.outdir}/spotyping/$sample_name", mode: params.mode
+
+    input:
+        tuple val(sample_name), path(fastq_files)
+
+    output:
+        path("$sample_name.*"), emit: other
+        path("$sample_name"), emit: code
+        path("${sample_name}.tsv"), emit: table
+
+    script:
+        def reads = fastq_files instanceof List ? fastq_files : [fastq_files]
+
+        reads = reads.join(" ")
+
+        """
+        SpoTyping.py $reads --noQuery -o $sample_name
+        awk -F '\\t' -v OFS='\\t' -v S='${sample_name}' \\
+            'NR==1 {print S, \$2, \$3}' \\
+            ${sample_name} > ${sample_name}.tsv
+        """
+}
