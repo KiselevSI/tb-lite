@@ -64,8 +64,7 @@ workflow FILTER {
 
         bam_good      = bam_all.join(good_samples)
 
-        paired_reads = trimmed_good.filter { _id, files -> files.size() == 2 }
-            .join( good_samples)
+
 
         wgs_metrics = map_stats.wgs
         align_metrics = map_stats.align
@@ -74,7 +73,6 @@ workflow FILTER {
 
     emit:
         trimmed_good
-        paired_reads
         bam_good
         tbmix
         wgs_metrics

@@ -16,7 +16,6 @@ include { TB_PROFILER_DR } from '../modules/genotyping/tb_profiler'
 
 workflow GENOTYPE {
     take:
-        paired_reads
         trimmed_reads
         vcf
         bam_good
@@ -27,6 +26,8 @@ workflow GENOTYPE {
 
         is6110 = Channel.value(file(params.is6110))
         ref_gbk = Channel.value(file(params.ref_gbk))
+
+        paired_reads = trimmed_reads.filter { _id, files -> files.size() == 2 }
 
 
         ISMAPPER(paired_reads, is6110, ref_gbk)

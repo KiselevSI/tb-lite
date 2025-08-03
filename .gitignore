@@ -4,3 +4,6 @@ res*
 work
 data
 *.sif
+uv.lock
+pyproject.toml
+.venv
