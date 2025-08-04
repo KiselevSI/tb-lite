@@ -1,5 +1,7 @@
 process FASTP {
     tag "fastp: $sample_name"
+    label 'medium_mem'
+    label 'solo_cpu'
     publishDir("${params.outdir}/fastp/$sample_name", mode: params.mode)
     
     input:

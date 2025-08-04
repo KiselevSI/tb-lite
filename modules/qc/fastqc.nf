@@ -1,5 +1,7 @@
 process FASTQC {
     tag "fastqc: $sample_name"
+    label 'medium_mem'
+    label 'multi_cpu'
     publishDir("${params.outdir}/fastqc/", mode: params.mode)
     
     input:

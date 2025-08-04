@@ -3,7 +3,7 @@ From: python:3.12-slim
 
 
 %files
-    /home/zerg/git/tb-lite/scripts/tb_mix.py  /opt/tb_mix.py
+    assets/scripts/tb_mix.py  /opt/tb_mix.py
 
 %post
     set -e

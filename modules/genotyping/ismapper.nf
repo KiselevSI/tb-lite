@@ -1,5 +1,7 @@
 process ISMAPPER {
     tag        "is6110: $sample_name"
+    label 'big_mem'
+    label 'multi_cpu'
     publishDir "${params.outdir}/is6110/paired", mode: params.mode
 
     input:

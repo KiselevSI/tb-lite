@@ -1,5 +1,7 @@
 process BCFTOOLS_CALL_VARIANTS {
     tag "call_variants: ${sample_name}"
+    label 'big_mem'
+    label 'multi_cpu'
     publishDir "${params.outdir}/vcf/${sample_name}", mode: params.mode
 
     input:

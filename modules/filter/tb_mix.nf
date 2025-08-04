@@ -1,5 +1,7 @@
 process TB_MIX {
     tag "run_lineage: ${sample_name}"
+    label 'small_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/tb-mix", mode: params.mode
 
     input:

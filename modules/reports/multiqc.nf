@@ -1,5 +1,6 @@
 process MULTIQC {
     tag "multiqc"
+    label 'medium_mem'
     publishDir "${params.outdir}/multiqc", mode: params.mode
 
     input:

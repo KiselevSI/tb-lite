@@ -1,5 +1,6 @@
 process ANNOTATION_VCFS {
     tag "run_annotation_merge_vcf"
+    label 'small_mem'
     publishDir "${params.outdir}/TABLE_ANNOTATION", mode: params.mode
 
     input:

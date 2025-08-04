@@ -19,7 +19,7 @@ From: debian:bookworm-slim          # современный base, BLAST 2.12 и
     apt-get update
     DEBIAN_FRONTEND=noninteractive \
         apt-get install -y --no-install-recommends \
-        locales ca-certificates wget curl bzip2
+        locales ca-certificates wget curl bzip2 procps
     
 
     ######## 1. micromamba ########

@@ -1,5 +1,6 @@
 process RENAME_CHR {
     tag "run_rename_chromosome_merge_vcf"
+    label 'small_mem'
     publishDir "${params.outdir}/TABLE_ANNOTATION", mode: params.mode
     
 

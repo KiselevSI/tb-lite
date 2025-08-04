@@ -1,5 +1,7 @@
 process BWA_PICARD {
     tag "mapping: $sample_name"
+    label 'big_mem'
+    label 'multi_cpu'
     publishDir "${params.outdir}/mapped/${sample_name}", mode: params.mode
 
     input:

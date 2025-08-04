@@ -1,5 +1,7 @@
 process RENAME_CHR {
     tag        "RENAME_CHR: $sample_name"
+    label 'small_mem'
+    label 'solo_cpu'
     
 
     input:

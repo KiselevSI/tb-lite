@@ -1,5 +1,7 @@
 process MOSDEPTH {
     tag "mosdepth: ${sample_name}"
+    label 'small_mem'
+    label 'multi_cpu'
     publishDir "${params.outdir}/stats/mosdepth/${sample_name}", mode: params.mode
 
     input:

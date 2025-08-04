@@ -1,9 +1,11 @@
 process TB_PROFILER_DR {
     tag "run_tb_profiler_dr: $sample_name"
+    label 'big_mem'
+    label 'multi_cpu'
     publishDir "${params.outdir}/tb-profiler/drug-resist/$sample_name", mode: params.mode
 
     input:
-        tuple val(sample_name), path(vcf), path(vcf_csi)
+        tuple val(sample_name), path(bam), path(bam_idx) 
 
     output:
         path("*"), emit: other
@@ -12,6 +14,6 @@ process TB_PROFILER_DR {
     script:
 
         """
-        tb-profiler profile --vcf $vcf -p $sample_name --txt
+        tb-profiler profile -t ${task.cpus} --bam $bam -p $sample_name --txt
         """
 }

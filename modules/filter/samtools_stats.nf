@@ -1,5 +1,7 @@
 process RUN_SAMTOOLS_STATS{
     tag "run_samtools_stats: ${sample_name}"
+    label 'small_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/stats/samtools/${sample_name}", mode: params.mode
 
     input:

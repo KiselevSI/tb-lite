@@ -1,5 +1,7 @@
 process RD {
     tag "RD: ${sample_name}"
+    label 'small_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/rd/${sample_name}", mode: params.mode
 
     input:

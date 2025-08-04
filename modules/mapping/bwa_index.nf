@@ -1,5 +1,6 @@
 process BWA_INDEX {
     tag "index reference: $ref"
+    label 'small_mem'
     publishDir("${params.outdir}/ref/", mode: params.mode)
     
     input:

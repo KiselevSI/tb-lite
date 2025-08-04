@@ -1,5 +1,7 @@
 process RUN_MAP_STATS {
     tag "map_stats: ${sample_name}"
+    label 'medium_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/stats/picard/${sample_name}", mode: params.mode
 
     input:

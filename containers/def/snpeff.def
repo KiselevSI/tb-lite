@@ -2,7 +2,7 @@ Bootstrap: docker
 From: continuumio/miniconda3
 
 %files
-    /home/zerg/git/tb-lite/ref/h37rv.fa /ref/h37rv.fa
+    assets/h37rv.fa /ref/h37rv.fa
 
 
 %post

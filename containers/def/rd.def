@@ -1,20 +1,9 @@
 Bootstrap: docker
 From: python:3.11-slim    # при желании поменяйте версию Python
 
-%labels
-    Author      Your Name
-    Version     1.0
-    Description Singularity image for CorrectedMosdepthRDScanner
-
-%help
-    This container runs the CorrectedMosdepthRDScanner script.
-    Example:
-        singularity run rdscanner.sif \
-            /data/coverage.per-base.bed.gz \
-            -k /data/known_RDs.bed
 
 %files
-    scripts/rd.py  /opt/rd.py
+    assets/scripts/rd.py  /opt/rd.py
 
 %post
     set -e
@@ -22,7 +11,7 @@ From: python:3.11-slim    # при желании поменяйте верси�
     # Обновляем репозитории и ставим минимальный набор системных пакетов
     apt-get update \
       && apt-get install -y --no-install-recommends \
-         build-essential \
+         build-essential procps\
       && rm -rf /var/lib/apt/lists/*
 
     # Устанавливаем Python-библиотеки

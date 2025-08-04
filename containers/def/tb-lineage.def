@@ -3,8 +3,8 @@ From: python:3.12-slim
 
 
 %files
-    /home/zerg/git/tb-lite/scripts/pileup_counter.py  /opt/pileup_counter.py
-    /home/zerg/git/tb-lite/scripts/tb-lineage.py /opt/tb-lineage.py
+    assets/scripts/pileup_counter.py  /opt/pileup_counter.py
+    assets/scripts/tb-lineage.py /opt/tb-lineage.py
 
 %post
     set -e

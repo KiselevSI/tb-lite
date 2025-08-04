@@ -1,5 +1,7 @@
 process TBLG {
     tag        "tblg: $sample_name"
+    label 'small_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/lineage", mode: params.mode
 
     input:

@@ -39,7 +39,7 @@ workflow GENOTYPE {
 
         RD(bed, rd_db)
 
-        dr = TB_PROFILER_DR(vcf).results
+        dr = TB_PROFILER_DR(bam_good).results
 
     emit:
         tblg_table

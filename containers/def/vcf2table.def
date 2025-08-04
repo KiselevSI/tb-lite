@@ -3,8 +3,8 @@ From: python:3.12-slim
 
 
 %files
-    /home/zerg/git/tb-lite/scripts/merge_vcf.py  /opt/merge_vcf.py
-    /home/zerg/git/tb-lite/scripts/vcf2table.py  /opt/vcf2table.py
+    assets/scripts/merge_vcf.py  /opt/merge_vcf.py
+    assets/scripts/vcf2table.py  /opt/vcf2table.py
 
 %post
     set -e

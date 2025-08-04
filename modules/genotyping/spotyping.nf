@@ -1,5 +1,7 @@
 process SPOTYPING {
     tag        "SpoTyping: $sample_name"
+    label 'medium_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/spotyping/$sample_name", mode: params.mode
 
     input:

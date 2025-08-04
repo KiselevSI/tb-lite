@@ -1,5 +1,7 @@
 process BCFTOOLS_STATS{
     tag "run_bcftools_stats: ${sample_name}"
+    label 'small_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/stats/bcftools", mode: params.mode
 
     input:

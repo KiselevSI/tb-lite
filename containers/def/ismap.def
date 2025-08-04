@@ -16,7 +16,7 @@ From: python:3.8-slim    # при желании поменяйте версию
          bwa \
          samtools \
          bedtools \
-         ncbi-blast+ \
+         ncbi-blast+ procps \
       && rm -rf /var/lib/apt/lists/*
 
     # Устанавливаем Python-библиотеки

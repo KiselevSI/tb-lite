@@ -1,5 +1,7 @@
 process SNPEFF_ANNOTATE_VCF {
     tag        "drug_resist: $sample_name"
+    label 'small_mem'
+    label 'solo_cpu'
     publishDir "${params.outdir}/annotate_vcf", mode: params.mode
 
     input:

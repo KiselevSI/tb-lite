@@ -1,5 +1,6 @@
 process FINAL_TABLE {
     tag "Final Table"
+    label 'small_mem'
     publishDir "${params.outdir}", mode: params.mode
 
     input:
@@ -16,6 +17,7 @@ process FINAL_TABLE {
     script:
     """
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
+    
 
     echo -e "Sample\\tSpolBin\\tSpol8" > spotyping.total.tsv
 
