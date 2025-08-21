@@ -22,7 +22,7 @@ workflow CALLVAR {
         bcftools_stats = BCFTOOLS_STATS(vcf)
         vcfs = call_variants.vcfs
         vcf_renamed = RENAME_CHR(vcf, chr_name)
-        vcf_annotated = SNPEFF_ANNOTATE_VCF(vcf_renamed)
+        vcf_annotated = SNPEFF_ANNOTATE_VCF(vcf_renamed).ann
 
     emit:
         vcf
