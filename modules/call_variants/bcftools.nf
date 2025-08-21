@@ -15,13 +15,23 @@ process BCFTOOLS_CALL_VARIANTS {
 
     script:
         """
-        bcftools mpileup --threads ${task.cpus} \
-            --min-MQ 30 --ignore-overlaps --max-depth 3000 \
-            -f ${ref} ${bam} -Ou | \
-        bcftools call --threads ${task.cpus} --multiallelic-caller \
-            --ploidy 1 --variants-only -Ou - | \
-        bcftools view --threads ${task.cpus} \
-            --include 'QUAL>20 && DP>10' -Oz -o ${sample_name}.vcf.gz
-        bcftools index ${sample_name}.vcf.gz
+        bcftools mpileup \
+            --threads ${task.cpus} \
+            -f ${ref} \
+            -q 20 -Q 20 \
+            --max-depth 10000 \
+            -a AD,DP \
+            ${bam} -Ou | \
+        bcftools call \
+            --threads ${task.cpus} \
+            -m --ploidy 1 -v -Ou | \
+        bcftools norm \
+            -f ${ref} -m -both -c w -Ou | \
+        bcftools view \
+            --threads ${task.cpus} \
+            -i 'QUAL>=20 && FMT/DP>=10' \
+            -Oz -o ${sample_name}.vcf.gz
+
+        bcftools index -f ${sample_name}.vcf.gz
         """
 }
