@@ -5,21 +5,26 @@ process SNPEFF_ANNOTATE_VCF {
     publishDir "${params.outdir}/annotate_vcf/${sample_name}", mode: params.mode
 
     input:
-        tuple val(sample_name), path(vcf_renamed)        
+        tuple val(sample_name), path(vcf_renamed)
 
     output:
         tuple val(sample_name), path("${sample_name}.annotated.vcf.gz"), emit: ann
-        tuple val(sample_name), path("${sample_name}.ann.tsv"), emit: ann_table
 
     script:
-
         """
-        snpEff ann -noLog -noStats -no-downstream -no-upstream -no-utr -v Mycobacterium_tuberculosis_h37rv ${vcf_renamed} | bgzip -c > ${sample_name}.annotated.vcf.gz
-        
-        bcftools index -f ${sample_name}.annotated.vcf.gz
-        
-        bcftools query -f '%POS\\t%REF\\t%ALT\\t%QUAL\\t%INFO/ANN\\n' \
-            ${sample_name}.annotated.vcf.gz > ${sample_name}.ann.tsv
+        # 1) Аннотация в plain VCF
+        snpEff ann \
+          -noLog -noStats -no-downstream -no-upstream -no-utr \
+          -v Mycobacterium_tuberculosis_h37rv \
+          ${vcf_renamed} \
+          > ${sample_name}.annotated.vcf
+
+        # 2) BGZF-сжатие
+        bgzip -@ ${task.cpus} -c ${sample_name}.annotated.vcf > ${sample_name}.annotated.vcf.gz
+        rm ${sample_name}.annotated.vcf
+
+        # 3) Tabix-индекс
+        tabix -p vcf ${sample_name}.annotated.vcf.gz
 
         """
 }

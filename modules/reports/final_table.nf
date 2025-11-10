@@ -16,6 +16,7 @@ process FINAL_TABLE {
 
     script:
     """
+
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
     
 

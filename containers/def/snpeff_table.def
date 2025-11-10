@@ -1,0 +1,30 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%files
+    snpEff_latest_core/snpEff /opt/snpEff
+
+%post
+
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        openjdk-21-jre-headless \
+        ca-certificates \
+        build-essential procps coreutils gawk grep sed findutils \
+        bcftools samtools \
+        wget unzip gzip \
+    && rm -rf /var/lib/apt/lists/*
+
+    # Сделать snpEff/SnpSift доступными в PATH
+    ln -s /opt/snpEff/scripts/snpEff  /usr/local/bin/snpEff
+    ln -s /opt/snpEff/scripts/snpSift /usr/local/bin/snpSift
+
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+    export SNPEFF_HOME=/opt/snpEff
+    export PATH=/opt/snpEff/scripts:$PATH
+    export PYTHONUNBUFFERED=1
+

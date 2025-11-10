@@ -7,7 +7,7 @@ include { FILTER   }      from './subworkflows/filter'
 include { CALLVAR  }      from './subworkflows/call_varints'
 include { GENOTYPE }      from './subworkflows/genotyping'
 include { REPORTS  }      from './subworkflows/reports'
-include { VCF2TABLE  }      from './subworkflows/vcf2table'
+include { ANN_TABLE  }      from './subworkflows/ann_table'
 
 /* === Top-level workflow ====================================== */
 workflow {
@@ -59,11 +59,13 @@ workflow {
         filt.tbmix,               // tbmix
         gen.spol_table,        // spotyping
         gen.tblg_table,        // tblg_table  (должен быть emit’ом GENOTYPE)
-        gen.dr                 // drugs
+        gen.dr
     )
 
-    VCF2TABLE(
-        callvar.vcfs
+    ANN_TABLE(
+        callvar.other_count
     )
+
 
 }
+

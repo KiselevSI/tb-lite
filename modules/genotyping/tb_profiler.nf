@@ -14,6 +14,6 @@ process TB_PROFILER_DR {
     script:
 
         """
-        tb-profiler profile -t ${task.cpus} --bam $bam -p $sample_name --txt
+        tb-profiler profile -t ${task.cpus} --bam $bam -p $sample_name --txt --call_whole_genome
         """
 }
