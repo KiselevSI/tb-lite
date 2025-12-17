@@ -4,5 +4,10 @@
 *.vcf.gz
 results/
 data/
+work/
+res2/
+.nextflow/
 *.log
 *.nextflow.log*
+containers
+run.csv

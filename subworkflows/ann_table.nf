@@ -24,7 +24,7 @@ workflow ANN_TABLE {
         merged = MERGE(vcf, tbi)
         ann = SNPEFF_ANN(merged, chr_name)
         table = MAKE_TABLE(ann)
-        feature_table = Channel.fromPath("assets/SNPEFF_ANNOTATION/h37rv_feature_table.txt")
+        feature_table = Channel.fromPath(params.h37rv_feature_table)
         final_table = POST_PROCESS_TABLE(table, feature_table)
 
 }

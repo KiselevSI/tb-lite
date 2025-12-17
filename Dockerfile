@@ -40,9 +40,8 @@ RUN curl -L https://github.com/apptainer/apptainer/releases/download/v1.4.1/appt
 ############################ 5️⃣ Pipeline code #################################
 WORKDIR /workspace
 
-# Копируем всё, кроме файлов, исключённых .dockerignore  (FASTQ/BAM  и т.д.) :contentReference[oaicite:6]{index=6}
-COPY main.nf nextflow.config scripts/ ref/ db/ IS6110_db/
-COPY containers/ ./containers          
+# Копируем весь рабочий каталог, полагаясь на .dockerignore, чтобы не тянуть FASTQ/BAM и крупные рабочие директории :contentReference[oaicite:6]{index=6}
+COPY . .
 
 # Nextflow будет искать SIF‑файлы именно здесь
 ENV NXF_SINGULARITY_CACHEDIR=/workspace/containers 
