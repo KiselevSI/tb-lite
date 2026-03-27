@@ -12,6 +12,11 @@ include { ANN_TABLE  }      from './subworkflows/ann_table'
 /* === Top-level workflow ====================================== */
 workflow {
 
+    sample_count = Math.max(
+        file(params.samples).toFile().readLines().findAll { it.trim() }.size() - 1,
+        0
+    )
+
     reads = Channel
       .fromPath(params.samples)           // файл с таблицей
       .splitCsv(header:true, sep:',')    // Map на каждую строку
@@ -59,13 +64,17 @@ workflow {
         filt.tbmix,               // tbmix
         gen.spol_table,        // spotyping
         gen.tblg_table,        // tblg_table  (должен быть emit’ом GENOTYPE)
-        gen.dr
+        gen.dr,
+        gen.del
     )
 
-    ANN_TABLE(
-        callvar.other_count
-    )
+    if (sample_count > 1) {
+        ANN_TABLE(
+            callvar.other_count
+        )
+    } else {
+        log.info "Skipping ANN_TABLE: input sample count is ${sample_count}, need more than 1"
+    }
 
 
 }
-

@@ -9,5 +9,5 @@ res2/
 .nextflow/
 *.log
 *.nextflow.log*
-containers
+containers/*.sif
 run.csv

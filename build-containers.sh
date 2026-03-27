@@ -1,4 +1,5 @@
 singularity build --fakeroot containers/build_table.sif containers/def/build_table.def
+singularity build --fakeroot containers/tb_platform_tables.sif containers/def/tb_platform_tables.def
 singularity build --fakeroot containers/bwa-picard.sif containers/def/bwa-picard.def
 singularity build --fakeroot containers/ismap.sif containers/def/ismap.def
 singularity build --fakeroot containers/map.sif containers/def/map.def
@@ -16,4 +17,3 @@ singularity pull containers/bcftools.1.22.sif docker://staphb/bcftools:1.22
 singularity pull containers/fastp_0.24.1.sif  docker://staphb/fastp:0.24.1
 singularity pull containers/multiqc_v1.30.sif  docker://multiqc/multiqc:v1.30
 singularity pull containers/picard_3.4.0.sif  docker://broadinstitute/picard:3.4.0
-

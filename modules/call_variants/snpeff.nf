@@ -13,9 +13,9 @@ process SNPEFF_ANNOTATE_VCF {
     script:
         """
         # 1) Аннотация в plain VCF
-        snpEff ann \
-          -noLog -noStats -no-downstream -no-upstream -no-utr \
-          -v Mycobacterium_tuberculosis_h37rv \
+        snpEff \
+          -noLog -noStats -nodownload -no-downstream -no-upstream -no-utr \
+          -v ${params.snpeff_db} \
           ${vcf_renamed} \
           > ${sample_name}.annotated.vcf
 

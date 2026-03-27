@@ -7,6 +7,7 @@
  */
 include { MULTIQC } from '../modules/reports/multiqc'   // условный пример
 include { FINAL_TABLE } from '../modules/reports/final_table'   // условный пример
+include { TB_PLATFORM_TABLES } from '../modules/reports/tb_platform_tables'   // условный пример
 
 workflow REPORTS {
     take:
@@ -20,6 +21,7 @@ workflow REPORTS {
         spotyping
         tblg_table
         drugs
+        del
 
     main:
         multiqc_files = wgs_metrics.mix(align_metrics)
@@ -31,6 +33,20 @@ workflow REPORTS {
         cfg = Channel.fromPath(params.multiqc)
 
         multiqc = MULTIQC(multiqc_files.collect(), cfg)
+
+        rd = del.map { _sample_name, path -> path }  // извлекаем только пути из канала del
+
+        gbk = Channel.value(file(params.gbk))
+
+        TB_PLATFORM_TABLES(
+            multiqc.report,
+            tbmix.collect(),
+            spotyping.collect(),
+            tblg_table.collect(),
+            drugs.collect(),
+            rd.collect(),
+            gbk
+        )
         final_table = FINAL_TABLE(multiqc.report, tbmix.collect(), spotyping.collect(), tblg_table.collect(), drugs.collect())
 
 

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Skill(snpeff)",
+      "Bash(/Users/kqrw311/workspace/SnpEff/.claude/skills/snpeff/snpeff.sh:*)",
+      "Bash(/Users/kqrw311/workspace/SnpEff/.claude/skills/snpsift/snpsift.sh:*)"
+    ]
+  }
+}

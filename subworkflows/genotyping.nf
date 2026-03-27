@@ -37,7 +37,7 @@ workflow GENOTYPE {
 
         rd_db = Channel.value(file(params.rd_db))
 
-        RD(bed, rd_db)
+        del = RD(bed, rd_db).rd
 
         dr = TB_PROFILER_DR(bam_good).results
 
@@ -45,5 +45,6 @@ workflow GENOTYPE {
         tblg_table
         spol_table
         dr
+        del
 
 }

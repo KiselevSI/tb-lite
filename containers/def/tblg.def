@@ -12,7 +12,7 @@ From: python:3.11-slim    # при желании поменяйте верси�
       && rm -rf /var/lib/apt/lists/*
 
     # Устанавливаем Python-библиотеки
-    pip install tblg
+    pip install "numpy<2.0" "pandas<2.0" tblg
 
     
 

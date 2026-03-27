@@ -11,7 +11,7 @@ From: continuumio/miniconda3
     conda config --add channels bioconda
     conda config --add channels conda-forge
 
-    conda create -n tbprof -c bioconda tb-profiler=6.6.5
+    conda create -n tbprof -c conda-forge -c bioconda tb-profiler=6.6.6
     
     conda clean -afy
 
@@ -22,6 +22,7 @@ From: continuumio/miniconda3
     conda activate tbprof
 
     tb-profiler update_tbdb --match_ref /ref/h37rv.fa
+
 
 %runscript
     # при запуске среды уже активирована, просто выполняем tb-profiler

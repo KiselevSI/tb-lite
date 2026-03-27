@@ -8,7 +8,7 @@ process FASTQC {
     tuple val(sample_name), path(fastq_files)
     
     output:
-    path "*"
+    path "${sample_name}/*"
     
     script:
 

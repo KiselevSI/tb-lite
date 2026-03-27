@@ -9,7 +9,7 @@ process RD {
         path db
 
     output:
-        tuple val(sample_name), path("${sample_name}.novel_rd.tsv"),
+        tuple val(sample_name), path("${sample_name}.novel_rd.tsv"), emit: rd
         path("${sample_name}.known_rd.tsv")
 
     script:

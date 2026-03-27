@@ -17,7 +17,6 @@ workflow ANN_TABLE {
 
         filtered = other_count.filter { _vcf, _tbi, count -> count < 5000 }
 
-
         vcf = filtered.map { it[0]}.collect()
         tbi = filtered.map { it[1]}.collect()
 
