@@ -7,4 +7,4 @@ data
 uv.lock
 pyproject.toml
 .venv
-containers
+*.sif

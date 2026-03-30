@@ -1,0 +1,36 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+
+%files
+    assets/scripts/filter_tbmix.py        /opt/filter_tbmix.py
+    assets/scripts/build_general_table.py /opt/build_general_table.py
+    assets/scripts/deletions_to_csv.py    /opt/deletions_to_csv.py
+    assets/scripts/profiler_parser.py     /opt/profiler_parser.py
+
+%post
+    set -e
+
+    apt-get update \
+      && apt-get install -y --no-install-recommends \
+         procps coreutils gawk grep sed findutils \
+      && rm -rf /var/lib/apt/lists/*
+
+    pip install --no-cache-dir pandas xlsxwriter openpyxl biopython
+
+    chmod +x /opt/filter_tbmix.py
+    chmod +x /opt/build_general_table.py
+    chmod +x /opt/deletions_to_csv.py
+    chmod +x /opt/profiler_parser.py
+
+    ln -s /opt/filter_tbmix.py /usr/local/bin/filter_tbmix.py
+    ln -s /opt/build_general_table.py /usr/local/bin/build_general_table.py
+    ln -s /opt/deletions_to_csv.py /usr/local/bin/deletions_to_csv.py
+    ln -s /opt/profiler_parser.py /usr/local/bin/profiler_parser.py
+
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export PATH=/opt:$PATH
+    export PYTHONUNBUFFERED=1

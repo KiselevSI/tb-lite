@@ -54,21 +54,23 @@ workflow {
               callvar.vcf,
               filt.bam_good )
     /* 8. ОТЧЁТЫ ----------------------------------------------------------- */
-    REPORTS(
-        filt.wgs_metrics,         // wgs_metrics
-        filt.align_metrics,       // align_metrics
-        qc.reports,          // fastqc_reports
-        callvar.bcftools_stats,     // bcftools_stats
-        filt.samtools_stat,       // samtools_stats
-        filt.samtools_flagstat,   // samtools_flagstat
-        filt.tbmix,               // tbmix
-        gen.spol_table,        // spotyping
-        gen.tblg_table,        // tblg_table  (должен быть emit’ом GENOTYPE)
-        gen.dr,
-        gen.del
-    )
+    if (!params.skip_reports) {
+        REPORTS(
+            filt.wgs_metrics,         // wgs_metrics
+            filt.align_metrics,       // align_metrics
+            qc.reports,          // fastqc_reports
+            callvar.bcftools_stats,     // bcftools_stats
+            filt.samtools_stat,       // samtools_stats
+            filt.samtools_flagstat,   // samtools_flagstat
+            filt.tbmix,               // tbmix
+            gen.spol_table,        // spotyping
+            gen.tblg_table,        // tblg_table  (должен быть emit’ом GENOTYPE)
+            gen.dr,
+            gen.del
+        )
+    }
 
-    if (sample_count > 1) {
+    if (sample_count > 1 & !params.skip_reports) {
         ANN_TABLE(
             callvar.other_count
         )
