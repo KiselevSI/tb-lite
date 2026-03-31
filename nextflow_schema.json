@@ -1,0 +1,179 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/tb-lite/master/nextflow_schema.json",
+    "title": "TB-Lite pipeline parameters",
+    "description": "Mycobacterium tuberculosis WGS analysis pipeline",
+    "type": "object",
+    "definitions": {
+        "input_output_options": {
+            "title": "Input/output options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Define where the pipeline should find input data and save output data.",
+            "required": ["samples", "outdir"],
+            "properties": {
+                "samples": {
+                    "type": "string",
+                    "description": "Path to CSV samplesheet (Sample,R1,R2,Layout).",
+                    "fa_icon": "fas fa-file-csv"
+                },
+                "outdir": {
+                    "type": "string",
+                    "default": "./results",
+                    "description": "The output directory where results will be saved.",
+                    "fa_icon": "fas fa-folder-open"
+                },
+                "mode": {
+                    "type": "string",
+                    "default": "copy",
+                    "description": "publishDir mode: copy or link.",
+                    "enum": ["copy", "link"]
+                }
+            }
+        },
+        "reference_genome": {
+            "title": "Reference genome",
+            "type": "object",
+            "fa_icon": "fas fa-dna",
+            "description": "Reference genome and annotation files.",
+            "properties": {
+                "reference": {
+                    "type": "string",
+                    "description": "Path to reference genome FASTA (H37Rv)."
+                },
+                "gff": {
+                    "type": "string",
+                    "description": "Path to GFF3 annotation file."
+                },
+                "gbk": {
+                    "type": "string",
+                    "description": "Path to GenBank reference file."
+                },
+                "snpeff_db": {
+                    "type": "string",
+                    "default": "Mycobacterium_tuberculosis_h37rv",
+                    "description": "SnpEff database name."
+                },
+                "chr_name": {
+                    "type": "string",
+                    "description": "Path to chromosome name mapping file."
+                }
+            }
+        },
+        "genotyping_options": {
+            "title": "Genotyping options",
+            "type": "object",
+            "fa_icon": "fas fa-microscope",
+            "description": "Options for genotyping analyses.",
+            "properties": {
+                "rd_db": {
+                    "type": "string",
+                    "description": "Path to Region of Difference BED file."
+                },
+                "is6110": {
+                    "type": "string",
+                    "description": "Path to IS6110 FASTA for ISMapper."
+                },
+                "ref_gbk": {
+                    "type": "string",
+                    "description": "Path to GenBank reference for ISMapper."
+                },
+                "levels": {
+                    "type": "string",
+                    "description": "Path to TB-Mix levels TSV file."
+                }
+            }
+        },
+        "annotation_options": {
+            "title": "Annotation options",
+            "type": "object",
+            "fa_icon": "fas fa-tags",
+            "description": "Annotation table options.",
+            "properties": {
+                "feature_table": {
+                    "type": "string",
+                    "description": "Path to VCF-to-table feature table."
+                },
+                "h37rv_feature_table": {
+                    "type": "string",
+                    "description": "Path to H37Rv SnpEff annotation feature table."
+                }
+            }
+        },
+        "filtering_options": {
+            "title": "Filtering options",
+            "type": "object",
+            "fa_icon": "fas fa-filter",
+            "description": "Quality filtering thresholds.",
+            "properties": {
+                "min_align_pct": {
+                    "type": "integer",
+                    "default": 80,
+                    "description": "Minimum alignment percentage to pass filter."
+                },
+                "min_mean_cov": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Minimum mean coverage to pass filter."
+                },
+                "min_median": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Minimum median coverage to pass filter."
+                }
+            }
+        },
+        "reporting_options": {
+            "title": "Reporting options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-bar",
+            "description": "Report generation options.",
+            "properties": {
+                "skip_reports": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip MultiQC and final report generation."
+                },
+                "multiqc": {
+                    "type": "string",
+                    "description": "Path to MultiQC configuration YAML."
+                }
+            }
+        },
+        "container_options": {
+            "title": "Container options",
+            "type": "object",
+            "fa_icon": "fas fa-box",
+            "description": "Container-related settings.",
+            "properties": {
+                "sifDir": {
+                    "type": "string",
+                    "description": "Directory for Singularity SIF images."
+                }
+            }
+        },
+        "generic_options": {
+            "title": "Generic options",
+            "type": "object",
+            "fa_icon": "fas fa-cogs",
+            "properties": {
+                "help": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Display help text.",
+                    "hidden": true
+                }
+            }
+        }
+    },
+    "allOf": [
+        { "$ref": "#/definitions/input_output_options" },
+        { "$ref": "#/definitions/reference_genome" },
+        { "$ref": "#/definitions/genotyping_options" },
+        { "$ref": "#/definitions/annotation_options" },
+        { "$ref": "#/definitions/filtering_options" },
+        { "$ref": "#/definitions/reporting_options" },
+        { "$ref": "#/definitions/container_options" },
+        { "$ref": "#/definitions/generic_options" }
+    ]
+}

@@ -1,0 +1,50 @@
+/*
+ * genotyping.nf : spoligotyping + is6110 + rd
+ * IN : bam_good  – tuple val(sample_name), path(bam)
+ *      reference – path(ref.fa)
+ * OUT: spoligo   – tuple val(sample_name), path(spoligotyping.txt)
+ *      is6110    – tuple val(sample_name), path(is6110.bed)
+ *      rd        – tuple val(sample_name), path(read_depth.tab)
+ */
+
+include { ISMAPPER } from '../../modules/local/genotyping/ismapper/main'
+include { SPOTYPING } from '../../modules/local/genotyping/spotyping/main'
+include { MOSDEPTH } from '../../modules/local/genotyping/mosdepth/main'
+include { RD } from '../../modules/local/genotyping/rd/main'
+include { TBLG } from '../../modules/local/genotyping/tblg/main'
+include { TB_PROFILER_DR } from '../../modules/local/genotyping/tb_profiler_dr/main'
+
+workflow GENOTYPE {
+    take:
+        trimmed_reads
+        vcf
+        bam_good
+
+    main:
+        tblg_table = TBLG(vcf)
+
+
+        is6110 = Channel.value(file(params.is6110))
+        ref_gbk = Channel.value(file(params.ref_gbk))
+
+        paired_reads = trimmed_reads.filter { _id, files -> files.size() == 2 }
+
+
+        ISMAPPER(paired_reads, is6110, ref_gbk)
+        spol_table = SPOTYPING(trimmed_reads).table
+
+        bed = MOSDEPTH(bam_good).bed
+
+        rd_db = Channel.value(file(params.rd_db))
+
+        del = RD(bed, rd_db).rd
+
+        dr = TB_PROFILER_DR(bam_good).results
+
+    emit:
+        tblg_table
+        spol_table
+        dr
+        del
+
+}

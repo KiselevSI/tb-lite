@@ -1,13 +1,16 @@
+nextflow.enable.dsl = 2
+
+WorkflowMain.initialise(workflow, params, log)
 
 /* === Подключаем все sub-workflow-ы ============================ */
-include { TRIMMING }      from './subworkflows/trimming'
-include { QC       }      from './subworkflows/qc'
-include { MAPPING  }      from './subworkflows/mapping'
-include { FILTER   }      from './subworkflows/filter'
-include { CALLVAR  }      from './subworkflows/call_varints'
-include { GENOTYPE }      from './subworkflows/genotyping'
-include { REPORTS  }      from './subworkflows/reports'
-include { ANN_TABLE  }      from './subworkflows/ann_table'
+include { TRIMMING }      from './subworkflows/local/trimming'
+include { QC       }      from './subworkflows/local/qc'
+include { MAPPING  }      from './subworkflows/local/mapping'
+include { FILTER   }      from './subworkflows/local/filter'
+include { CALLVAR  }      from './subworkflows/local/call_variants'
+include { GENOTYPE }      from './subworkflows/local/genotyping'
+include { REPORTS  }      from './subworkflows/local/reports'
+include { ANN_TABLE  }    from './subworkflows/local/ann_table'
 
 /* === Top-level workflow ====================================== */
 workflow {
@@ -41,7 +44,7 @@ workflow {
 
     /* 5. FILTERING + МЕТРИКИ --------------------------------------------- */
     filt = FILTER( trim.trimmed_reads,
-            maps.bam) 
+            maps.bam)
 
 
     /* 6. VARIANT CALLING -------------------------------------------------- */
@@ -64,19 +67,19 @@ workflow {
             filt.samtools_flagstat,   // samtools_flagstat
             filt.tbmix,               // tbmix
             gen.spol_table,        // spotyping
-            gen.tblg_table,        // tblg_table  (должен быть emit’ом GENOTYPE)
+            gen.tblg_table,        // tblg_table  (должен быть emit'ом GENOTYPE)
             gen.dr,
             gen.del
         )
     }
 
-    if (sample_count > 1 & !params.skip_reports) {
-        ANN_TABLE(
-            callvar.other_count
-        )
-    } else {
-        log.info "Skipping ANN_TABLE: input sample count is ${sample_count}, need more than 1"
-    }
+    // if (sample_count > 1 & !params.skip_reports) {
+    //     ANN_TABLE(
+    //         callvar.other_count
+    //     )
+    // } else {
+    //     log.info "Skipping ANN_TABLE: input sample count is ${sample_count}, need more than 1"
+    // }
 
 
 }
