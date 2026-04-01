@@ -8,7 +8,8 @@ from pathlib import Path
 R1_PATTERNS = [r'(_R?1)(?=[._])', r'(_1)(?=[._])']
 R2_PATTERNS = [r'(_R?2)(?=[._])', r'(_2)(?=[._])']
 
-FASTQ_EXTS = ('.fastq', '.fastq.gz', '.fq', '.fq.gz')
+FASTQ_EXTS = ('.fastq.gz', '.fq.gz')
+PLAIN_FASTQ_EXTS = ('.fastq', '.fq')
 
 def detect_read_label(name: str):
     """Вернёт ('R1'|'R2'|None, core_name) где core_name — база для sample id."""
@@ -30,6 +31,19 @@ def sample_id_from_core(core: str):
 
 def build_samplesheet(in_dir: Path):
     files = [p for p in in_dir.rglob('*') if p.is_file() and p.suffixes and ''.join(p.suffixes).lower() in FASTQ_EXTS]
+    plain_fastq = [p for p in in_dir.rglob('*') if p.is_file() and p.suffixes and ''.join(p.suffixes).lower() in PLAIN_FASTQ_EXTS]
+
+    if not files and plain_fastq:
+        raise SystemExit(
+            "ERROR: найдены только несжатые FASTQ/FQ файлы. "
+            "TB-Lite ожидает gzipped входы (*.fastq.gz или *.fq.gz). "
+            "Сначала сожмите файлы, затем создайте samplesheet."
+        )
+    if files and plain_fastq:
+        print(
+            f"WARNING: найдено {len(plain_fastq)} несжатых FASTQ/FQ файлов. "
+            "Они будут проигнорированы; в samplesheet попадут только *.fastq.gz/*.fq.gz."
+        )
     pairs = {}
     singles = []
 
@@ -50,24 +64,24 @@ def build_samplesheet(in_dir: Path):
         r1 = info.get('R1')
         r2 = info.get('R2')
         if r1 and r2:
-            rows.append([sid, r1, r2, 'PAIRED'])
+            rows.append([sid, r1, r2])
         elif r1 and not r2:
-            rows.append([sid, r1, '', 'SOLO'])
+            rows.append([sid, r1, ''])
         elif r2 and not r1:
-            rows.append([sid, '', r2, 'SOLO'])  # экзотичный случай
+            rows.append([sid, '', r2])  # экзотичный случай
 
     # одиночные, если их sample_id ещё не встречался в парах
     for sid, r1 in singles:
         if sid not in pairs:  # иначе уже добавили
-            rows.append([sid, r1, '', 'SOLO'])
+            rows.append([sid, r1, ''])
 
     # сортируем по sample id для стабильности
     rows.sort(key=lambda x: x[0])
     return rows
 
 def main():
-    ap = argparse.ArgumentParser(description='Создать samplesheet.csv для Nextflow из директории с FASTQ.')
-    ap.add_argument('-i', '--input', required=True, help='Входная директория с FASTQ/FQ файлами')
+    ap = argparse.ArgumentParser(description='Создать samplesheet.csv для Nextflow из директории с gzipped FASTQ.')
+    ap.add_argument('-i', '--input', required=True, help='Входная директория с файлами *.fastq.gz или *.fq.gz')
     ap.add_argument('-o', '--output', required=True, help='Путь к выходному CSV')
     args = ap.parse_args()
 
@@ -81,7 +95,7 @@ def main():
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open('w', newline='') as fh:
         w = csv.writer(fh)
-        w.writerow(['Sample', 'R1', 'R2', 'Layout'])
+        w.writerow(['sample', 'fastq_1', 'fastq_2'])
         w.writerows(rows)
 
     print(f"✓ Готово: {out_path} (samples: {len(rows)})")

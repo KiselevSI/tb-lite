@@ -5,30 +5,104 @@
  * OUT: vcf_annot – tuple val(sample_name), path(annot.vcf.gz)
  */
 
-include { BCFTOOLS_CALL_VARIANTS } from '../../modules/local/call_variants/bcftools_call_variants/main'
-include { FREEBAYES_CALL_VARIANTS } from '../../modules/local/call_variants/freebayes_call_variants/main'
-include { GATK_CALL_VARIANTS } from '../../modules/local/call_variants/gatk_call_variants/main'
-include { BCFTOOLS_STATS } from '../../modules/local/call_variants/bcftools_stats/main'
-include { RENAME_CHR } from '../../modules/local/call_variants/rename_chr/main'
-include { SNPEFF_ANNOTATE_VCF } from '../../modules/local/call_variants/snpeff_annotate_vcf/main'
+include { FREEBAYES } from '../../modules/nf-core/freebayes/main'
+include { BCFTOOLS_INDEX } from '../../modules/nf-core/bcftools/index/main'
+include { BCFTOOLS_NORM } from '../../modules/nf-core/bcftools/norm/main'
+include { BCFTOOLS_VIEW } from '../../modules/nf-core/bcftools/view/main'
+include { BCFTOOLS_STATS } from '../../modules/nf-core/bcftools/stats/main'
+include { BCFTOOLS_ANNOTATE } from '../../modules/nf-core/bcftools/annotate/main'
+include { SNPEFF_SNPEFF } from '../../modules/nf-core/snpeff/snpeff/main'
+
+process COUNT_VARIANTS {
+    tag "${meta.id}"
+    label 'process_low'
+
+    input:
+        tuple val(meta), path(vcf), path(tbi)
+
+    output:
+        tuple val(meta), path("${meta.id}.var_count.txt")
+
+    script:
+        """
+        gzip -cd ${vcf} | grep -cv '^#' > ${meta.id}.var_count.txt
+        """
+}
 
 workflow CALLVAR {
     take:
         bam_good
 
     main:
-        chr_name = Channel.value(file(params.chr_name))
-        //gff3 = Channel.value(file(params.gff))
-        ref = Channel.value(file(params.reference))
-        //call_variants = GATK_CALL_VARIANTS(bam_good, ref)//FREEBAYES_CALL_VARIANTS(bam_good, ref)//BCFTOOLS_CALL_VARIANTS(bam_good, ref)
-        //call_variants = BCFTOOLS_CALL_VARIANTS(bam_good, ref)
-        call_variants = FREEBAYES_CALL_VARIANTS(bam_good, ref)
-        vcf = call_variants.other
-        bcftools_stats = BCFTOOLS_STATS(vcf)
-        other_count = call_variants.other_count
-        vcf_renamed = RENAME_CHR(vcf, chr_name)
-        vcf_annotated = SNPEFF_ANNOTATE_VCF(vcf_renamed)
-        ann = vcf_annotated.ann
+        ref_meta = [id: file(params.reference).baseName]
+        ref = Channel.value([ref_meta, file(params.reference)])
+        ref_fai = Channel.value([ref_meta, file("${params.reference}.fai", checkIfExists: true)])
+        snpeff_cache = Channel.value([[id: 'snpeff_cache'], file(params.snpeff_data_dir, checkIfExists: true)])
+        chr_name = file(params.chr_name)
+
+        call_variants_input = bam_good.map { sample_name, bam, bai ->
+            [[id: sample_name], bam, bai, [], [], []]
+        }
+
+        FREEBAYES(
+            call_variants_input,
+            ref,
+            ref_fai,
+            [[], []],
+            [[], []],
+            [[], []]
+        )
+
+        BCFTOOLS_INDEX(FREEBAYES.out.vcf)
+
+        freebayes_indexed = FREEBAYES.out.vcf
+            .join(BCFTOOLS_INDEX.out.tbi)
+            .map { meta, vcf_file, vcf_index -> [meta, vcf_file, vcf_index] }
+
+        BCFTOOLS_NORM(freebayes_indexed, ref)
+
+        norm_vcf = BCFTOOLS_NORM.out.vcf
+            .join(BCFTOOLS_NORM.out.tbi)
+            .map { meta, vcf_file, vcf_index -> [meta, vcf_file, vcf_index] }
+
+        BCFTOOLS_VIEW(norm_vcf, [], [], [])
+
+        filtered_vcf = BCFTOOLS_VIEW.out.vcf
+            .join(BCFTOOLS_VIEW.out.tbi)
+            .map { meta, vcf_file, vcf_index -> [meta, vcf_file, vcf_index] }
+
+        BCFTOOLS_STATS(
+            filtered_vcf,
+            [[], []],
+            [[], []],
+            [[], []],
+            [[], []],
+            [[], []]
+        )
+
+        COUNT_VARIANTS(filtered_vcf)
+
+        other_count = filtered_vcf
+            .join(COUNT_VARIANTS.out)
+            .map { meta, vcf_file, vcf_index, count_file ->
+                tuple(meta.id, vcf_file, vcf_index, count_file)
+            }
+
+        vcf = filtered_vcf.map { meta, vcf_file, vcf_index ->
+            tuple(meta.id, vcf_file, vcf_index)
+        }
+
+        renamed_vcf_input = filtered_vcf.map { meta, vcf_file, vcf_index ->
+            [meta, vcf_file, vcf_index, [], [], [], [], chr_name]
+        }
+
+        BCFTOOLS_ANNOTATE(renamed_vcf_input)
+        SNPEFF_SNPEFF(BCFTOOLS_ANNOTATE.out.vcf, params.snpeff_db, snpeff_cache)
+
+        bcftools_stats = BCFTOOLS_STATS.out.stats.map { meta, stats_file -> stats_file }
+        ann = SNPEFF_SNPEFF.out.vcf.map { meta, ann_vcf ->
+            tuple(meta.id, ann_vcf)
+        }
 
     emit:
         vcf

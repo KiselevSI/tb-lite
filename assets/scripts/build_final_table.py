@@ -223,8 +223,10 @@ def parse_args():
     p = argparse.ArgumentParser(
         description="Собрать итоговую таблицу из MultiQC JSON и других файлов."
     )
-    p.add_argument("-m", "--multiqc", required=True,
+    p.add_argument("-m", "--multiqc", default=None,
                    help="multiqc_data.json или .json.gz")
+    p.add_argument("--base-table", default=None,
+                   help="Базовая TSV/CSV таблица метрик с колонкой ID")
     p.add_argument("-t", "--tables", nargs="*", default=[],
                    help="Дополнительные таблицы (маски путей допускаются)")
     p.add_argument("--dr", default=None,
@@ -246,7 +248,14 @@ def main():
     a = parse_args()
 
     # 1) База без DR
-    base_dfs: list[pd.DataFrame] = [multiqc_to_df(a.multiqc)]
+    base_dfs: list[pd.DataFrame] = []
+    if a.multiqc:
+        base_dfs.append(multiqc_to_df(a.multiqc))
+    if a.base_table:
+        base_dfs.append(read_table(Path(a.base_table), a.str_cols))
+    if not base_dfs:
+        raise ValueError("Нужно указать либо --multiqc, либо --base-table.")
+
     for mask in a.tables:
         for p in sorted(Path().glob(mask)):
             base_dfs.append(read_table(p, a.str_cols))

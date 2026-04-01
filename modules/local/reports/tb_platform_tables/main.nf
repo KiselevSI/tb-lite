@@ -4,7 +4,9 @@ process TB_PLATFORM_TABLES {
     publishDir "${params.outdir}/tb-platform", mode: params.mode
 
     input:
-    path multiqc
+    path wgs_metrics
+    path bcftools_stats
+    path samtools_flagstat
     path tbmix
     path spotyping
     path tblg_table
@@ -23,6 +25,7 @@ process TB_PLATFORM_TABLES {
 
     script:
     """
+    build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
     
@@ -38,8 +41,6 @@ process TB_PLATFORM_TABLES {
     profiler_parser.py -i $drugs -g $gbk --flat-header --also-other-variants -o dr.xlsx
 
     deletions_to_csv.py -i $rd -o rd.tsv
-  
-    build_general_table.py --round -m $multiqc -o general.tsv
     
     """
 }

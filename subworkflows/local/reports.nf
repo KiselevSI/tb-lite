@@ -1,11 +1,4 @@
-/*
- * reports.nf : сбор всех отчётов в одну папку/архив
- * IN : fastqc_reports – tuple val(sample_name), path(html/zip)
- *      tbmix          – tuple val(sample_name), path(tb_mix.txt)
- *      variant_stats  – tuple val(sample_name), path(bcftools_stats.txt)
- * OUT: multiqc_zip    – path(multiqc_report.zip)
- */
-include { MULTIQC } from '../../modules/local/reports/multiqc/main'
+include { MULTIQC } from '../../modules/nf-core/multiqc/main'
 include { FINAL_TABLE } from '../../modules/local/reports/final_table/main'
 include { TB_PLATFORM_TABLES } from '../../modules/local/reports/tb_platform_tables/main'
 
@@ -13,10 +6,12 @@ workflow REPORTS {
     take:
         wgs_metrics
         align_metrics
+        fastp_reports
         fastqc_reports
         bcftools_stats
         samtools_stats
         samtools_flagstat
+        kraken_reports
         tbmix
         spotyping
         tblg_table
@@ -24,30 +19,55 @@ workflow REPORTS {
         del
 
     main:
-        multiqc_files = wgs_metrics.mix(align_metrics)
-            .mix(fastqc_reports)
-            .mix(bcftools_stats)
-            .mix(samtools_stats)
-            .mix(samtools_flagstat)
-
-        cfg = Channel.fromPath(params.multiqc)
-
-        multiqc = MULTIQC(multiqc_files.collect(), cfg)
-
+        skip_multiqc = params.skip_multiqc || params.skip_reports
+        skip_final_reports = params.skip_final_reports || params.skip_reports
+        final_table = Channel.empty()
         rd = del.map { _sample_name, path -> path }  // извлекаем только пути из канала del
 
         gbk = Channel.value(file(params.gbk))
 
-        TB_PLATFORM_TABLES(
-            multiqc.report,
-            tbmix.collect(),
-            spotyping.collect(),
-            tblg_table.collect(),
-            drugs.collect(),
-            rd.collect(),
-            gbk
-        )
-        final_table = FINAL_TABLE(multiqc.report, tbmix.collect(), spotyping.collect(), tblg_table.collect(), drugs.collect())
+        if (!skip_multiqc) {
+            multiqc_files = wgs_metrics.mix(align_metrics)
+                .mix(fastp_reports)
+                .mix(fastqc_reports)
+                .mix(bcftools_stats)
+                .mix(samtools_stats)
+                .mix(samtools_flagstat)
+                .mix(kraken_reports)
+
+            cfg_path = params.multiqc_config ?: params.multiqc
+            cfg = cfg_path ? file(cfg_path) : []
+
+            MULTIQC(
+                multiqc_files.collect().map { files ->
+                    [[id: 'multiqc'], files, cfg, [], [], []]
+                }
+            )
+        }
+
+        if (!skip_final_reports) {
+            TB_PLATFORM_TABLES(
+                wgs_metrics.collect(),
+                bcftools_stats.collect(),
+                samtools_flagstat.collect(),
+                tbmix.collect(),
+                spotyping.collect(),
+                tblg_table.collect(),
+                drugs.collect(),
+                rd.collect(),
+                gbk
+            )
+
+            final_table = FINAL_TABLE(
+                wgs_metrics.collect(),
+                bcftools_stats.collect(),
+                samtools_flagstat.collect(),
+                tbmix.collect(),
+                spotyping.collect(),
+                tblg_table.collect(),
+                drugs.collect()
+            )
+        }
 
 
     emit:

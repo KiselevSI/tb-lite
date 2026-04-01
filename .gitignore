@@ -1,5 +1,8 @@
 .nextflow*
 .vscode
+.codex
+.batches/
+batches.log
 res*
 work
 data
@@ -7,4 +10,8 @@ data
 uv.lock
 pyproject.toml
 .venv
+venv/
+test_nfcore/
 *.sif
+__pycache__/
+*.pyc

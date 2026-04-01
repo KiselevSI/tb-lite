@@ -1,0 +1,185 @@
+{
+  "name": "tb-lite",
+  "homePage": "",
+  "repos": {
+    "https://github.com/nf-core/modules.git": {
+      "modules": {
+        "nf-core": {
+          "bbmap/repair": {
+            "branch": "master",
+            "git_sha": "91845fc72e00b6e26061a0a4ff9ad7efa019f387",
+            "installed_by": ["modules"]
+          },
+          "bcftools/annotate": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/call": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/index": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/merge": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/mpileup": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/norm": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/stats": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bcftools/view": {
+            "branch": "master",
+            "git_sha": "4b21e2cd1a9ea70e22b502cb45ee147410824760",
+            "installed_by": ["modules"]
+          },
+          "bracken/bracken": {
+            "branch": "master",
+            "git_sha": "004e773fc35ebd24063ca4cbef057c94a24208aa",
+            "installed_by": ["modules"]
+          },
+          "bracken/combinebrackenoutputs": {
+            "branch": "master",
+            "git_sha": "1e0df71086fe7dabc08a369b46f03f62c8af0407",
+            "installed_by": ["modules"]
+          },
+          "bwa/index": {
+            "branch": "master",
+            "git_sha": "baa9ee31e48f115832c8eb91a980bf35c9ffc9b9",
+            "installed_by": ["modules"]
+          },
+          "bwa/mem": {
+            "branch": "master",
+            "git_sha": "707241c72951f24fd89982c4c80c5983a4c437ef",
+            "installed_by": ["modules"]
+          },
+          "custom/sratoolsncbisettings": {
+            "branch": "master",
+            "git_sha": "8e6139dbf4f3ca01bbac6152d2833e04edff18df",
+            "installed_by": ["modules"]
+          },
+          "fastp": {
+            "branch": "master",
+            "git_sha": "1fb5a73bce8e4ac7079b0a9461b23d11e877ad14",
+            "installed_by": ["modules"]
+          },
+          "fastqc": {
+            "branch": "master",
+            "git_sha": "49b18b1639f4f7104187058866a8fab33332bdfe",
+            "installed_by": ["modules"]
+          },
+          "freebayes": {
+            "branch": "master",
+            "git_sha": "ff79a2ac0181596dbb7311092a8ba799a685eac0",
+            "installed_by": ["modules"]
+          },
+          "ismapper": {
+            "branch": "master",
+            "git_sha": "ffe8f0a85ca059893a57c00fd028cb42c48bff19",
+            "installed_by": ["modules"]
+          },
+          "kraken2/kraken2": {
+            "branch": "master",
+            "git_sha": "71a39f3598935d64ffd65f0960e4d2d4a42ab778",
+            "installed_by": ["modules"]
+          },
+          "mosdepth": {
+            "branch": "master",
+            "git_sha": "6832b69ef7f98c54876d6436360b6b945370c615",
+            "installed_by": ["modules"]
+          },
+          "multiqc": {
+            "branch": "master",
+            "git_sha": "90aef30f432332bdf0ce9f4b9004aa5d5c4960bb",
+            "installed_by": ["modules"]
+          },
+          "picard/collectalignmentsummarymetrics": {
+            "branch": "master",
+            "git_sha": "a631e12055f6c23ba2c942d3902b3ed1b9eed859",
+            "installed_by": ["modules"]
+          },
+          "picard/collectwgsmetrics": {
+            "branch": "master",
+            "git_sha": "a631e12055f6c23ba2c942d3902b3ed1b9eed859",
+            "installed_by": ["modules"]
+          },
+          "picard/markduplicates": {
+            "branch": "master",
+            "git_sha": "4e3e10e502ec6ab6b1c4b4fecd923ff1fa287338",
+            "installed_by": ["modules"]
+          },
+          "samtools/faidx": {
+            "branch": "master",
+            "git_sha": "156feda0cb6589cd29c04902004fa3b53bc00205",
+            "installed_by": ["modules"]
+          },
+          "samtools/flagstat": {
+            "branch": "master",
+            "git_sha": "156feda0cb6589cd29c04902004fa3b53bc00205",
+            "installed_by": ["modules"]
+          },
+          "samtools/idxstats": {
+            "branch": "master",
+            "git_sha": "156feda0cb6589cd29c04902004fa3b53bc00205",
+            "installed_by": ["modules"]
+          },
+          "samtools/index": {
+            "branch": "master",
+            "git_sha": "156feda0cb6589cd29c04902004fa3b53bc00205",
+            "installed_by": ["modules"]
+          },
+          "samtools/sort": {
+            "branch": "master",
+            "git_sha": "156feda0cb6589cd29c04902004fa3b53bc00205",
+            "installed_by": ["modules"]
+          },
+          "samtools/stats": {
+            "branch": "master",
+            "git_sha": "156feda0cb6589cd29c04902004fa3b53bc00205",
+            "installed_by": ["modules"]
+          },
+          "snpeff/snpeff": {
+            "branch": "master",
+            "git_sha": "b9d6ae8d65f33e04068aa5fe86dcc87c43ee81b0",
+            "installed_by": ["modules"]
+          },
+          "sratools/fasterqdump": {
+            "branch": "master",
+            "git_sha": "8e6139dbf4f3ca01bbac6152d2833e04edff18df",
+            "installed_by": ["modules"]
+          },
+          "sratools/prefetch": {
+            "branch": "master",
+            "git_sha": "8e6139dbf4f3ca01bbac6152d2833e04edff18df",
+            "installed_by": ["modules"]
+          },
+          "tbprofiler/profile": {
+            "branch": "master",
+            "git_sha": "41dfa3f7c0ffabb96a6a813fe321c6d1cc5b6e46",
+            "installed_by": ["modules"]
+          }
+        }
+      },
+      "subworkflows": {
+        "nf-core": {}
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@ From: python:3.12-slim
 
 %files
     assets/scripts/build_final_table.py  /opt/build_final_table.py
+    assets/scripts/build_metrics_table.py  /opt/build_metrics_table.py
     assets/scripts/filter_tbmix.py  /opt/filter_tbmix.py
     assets/scripts/dr_parser.py  /opt/dr_parser.py
     assets/scripts/merge_ann_tables.py  /opt/merge_ann_tables.py
@@ -19,11 +20,13 @@ From: python:3.12-slim
     pip install --no-cache-dir pandas xlsxwriter openpyxl
 
     chmod +x /opt/build_final_table.py
+    chmod +x /opt/build_metrics_table.py
     chmod +x /opt/filter_tbmix.py
     chmod +x /opt/dr_parser.py
     chmod +x /opt/merge_ann_tables.py
 
     ln -s /opt/build_final_table.py /usr/local/bin/build_final_table.py
+    ln -s /opt/build_metrics_table.py /usr/local/bin/build_metrics_table.py
     ln -s /opt/filter_tbmix.py /usr/local/bin/filter_tbmix.py
     ln -s /opt/dr_parser.py /usr/local/bin/dr_parser.py
     ln -s /opt/merge_ann_tables.py /usr/local/bin/merge_ann_tables.py
@@ -34,4 +37,3 @@ From: python:3.12-slim
     export LANG=C.UTF-8
     export PATH=/opt:$PATH
     export PYTHONUNBUFFERED=1
-

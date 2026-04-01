@@ -1,16 +1,17 @@
 /*
- * qc.nf : fastqc
- * IN : tuple val(sample_name), path(reads)
- * OUT: fastqc_reports – tuple val(sample_name), path(*_fastqc.{html,zip})
+ * qc.nf : nf-core/fastqc
+ * IN : tuple val(meta), path(reads)
+ * OUT: reports – path(*_fastqc.zip)
  */
-include { FASTQC } from '../../modules/local/qc/fastqc/main'
+include { FASTQC } from '../../modules/nf-core/fastqc/main'
 
 workflow QC {
     take:
         trimmed_reads
 
     main:
-        reports = FASTQC(trimmed_reads)
+        FASTQC(trimmed_reads)
+        reports = FASTQC.out.zip.map { meta, zip -> zip }
 
     emit:
         reports

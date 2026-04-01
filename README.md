@@ -2,16 +2,18 @@
 
 ## Обзор
 
-TB-Lite — это Nextflow-пайплайн для полного геномного анализа *Mycobacterium tuberculosis* (палочка Коха). Пайплайн принимает FASTQ-файлы секвенирования (paired-end и single-end) и выполняет полный цикл анализа: от контроля качества сырых ридов до определения филогенетической линии, споликотипа, регионов делеций (RD) и предсказания лекарственной устойчивости.
+TB-Lite — это Nextflow-пайплайн для полного геномного анализа *Mycobacterium tuberculosis* (палочка Коха). Пайплайн принимает либо локальные gzipped FASTQ-файлы секвенирования, либо список SRA accession ID, и выполняет полный цикл анализа: от контроля качества сырых ридов до определения филогенетической линии, споликотипа, регионов делеций (RD) и предсказания лекарственной устойчивости.
 
 **Референсный геном:** H37Rv (*M. tuberculosis*)
 
 ### Ключевые особенности
 
-- **8 этапов, 26 процессов** — модульная Nextflow DSL2-архитектура с subworkflows
+- **nf-core-совместимый каркас** — стандартные шаги QC/reporting и Kraken2/Bracken подключены через nf-core modules
 - **Автоматическая фильтрация** — образцы с низким покрытием (< 10X медиана) автоматически исключаются из дальнейшего анализа
 - **Детекция смешанных инфекций** — модуль TB-Mix выявляет образцы, содержащие несколько штаммов MTB
-- **Мультиплатформенность** — поддержка Singularity (HPC) и Docker (сервер)
+- **Мультиплатформенность** — стандартные runtime-профили `docker`, `singularity`, `conda`; по умолчанию включён Docker
+- **Два режима входа** — `--input` для FASTQ samplesheet и `--sra_ids` для списка SRA accession
+- **Опциональный Kraken2/Bracken** — отдельная ветка таксономической классификации с собственным флагом запуска
 - **Когортный анализ** — при подаче > 1 образца автоматически строится объединённая таблица аннотированных вариантов
 - **Поддержка paired-end и single-end** ридов (ISMapper работает только с парными)
 
@@ -25,7 +27,7 @@ tb-lite/
 ├── nextflow.config            # Конфигурация: параметры, профили, контейнеры
 ├── Dockerfile                 # Docker-образ для деплоя на сервере
 ├── build-containers.sh        # Скрипт сборки Singularity-контейнеров
-├── run.csv                    # Входной файл с образцами (пример)
+├── run.csv                    # Пример FASTQ samplesheet
 │
 ├── subworkflows/              # 8 подпроцессов (логические блоки)
 │   ├── trimming.nf            # Тримминг ридов
@@ -37,15 +39,9 @@ tb-lite/
 │   ├── reports.nf             # Отчёты
 │   └── ann_table.nf           # Когортная таблица аннотаций
 │
-├── modules/                   # 26 процессов (атомарные единицы)
-│   ├── trimming/              # fastp, repair_reads
-│   ├── qc/                    # fastqc
-│   ├── mapping/               # bwa_index, bwa_picard
-│   ├── call_variants/         # freebayes, bcftools, gatk, snpeff, rename_chr, bcftools_stats
-│   ├── filter/                # tb_mix, map_stats, samtools_stats
-│   ├── genotyping/            # spotyping, ismapper, mosdepth, rd, tblg, tb_profiler
-│   ├── reports/               # multiqc, final_table
-│   └── ann_table/             # merge, snpeff_ann, make_table, post_process_table
+├── modules/
+│   ├── nf-core/               # Готовые nf-core modules: fastp, fastqc, bwa, picard, samtools, freebayes, bcftools, multiqc, kraken2, bracken
+│   └── local/                 # TB-специфичные и табличные модули: tb_mix, spotyping, rd, tblg, reports, ann_table post-processing
 │
 ├── assets/                    # Референсные данные
 │   ├── h37rv.fa               # Референсный геном H37Rv
@@ -69,23 +65,38 @@ tb-lite/
 
 ## Входные данные
 
-### Файл образцов (`run.csv`)
+### 1. FASTQ samplesheet (`--input`)
 
-CSV-файл с 4 колонками:
+CSV-файл с колонками:
 
-| Колонка  | Описание |
-|----------|----------|
-| `Sample` | Имя образца (уникальное) |
-| `R1`     | Полный путь к FASTQ R1 |
-| `R2`     | Полный путь к FASTQ R2 (пусто для single-end) |
-| `Layout` | `PAIRED` или `SOLO` |
+| Колонка    | Описание |
+|------------|----------|
+| `sample`   | Имя образца |
+| `fastq_1`  | Полный путь к `*.fastq.gz` или `*.fq.gz` для R1 или single-end |
+| `fastq_2`  | Полный путь к `*.fastq.gz` или `*.fq.gz` для R2, пусто для single-end |
+
+Совместимость со старым форматом `Sample,R1,R2,Layout` сохранена.
+
+Важно: для `--input` поддерживаются только gzipped FASTQ (`*.fastq.gz` или `*.fq.gz`). Это тот же контракт, что и в `asm-lite`. Если у вас локальные файлы в виде `*.fastq`, их нужно предварительно сжать.
 
 **Пример:**
 ```csv
-Sample,R1,R2,Layout
-ERR123,/data/ERR123_1.fastq.gz,/data/ERR123_2.fastq.gz,PAIRED
-SRR456,/data/SRR456.fastq.gz,,SOLO
+sample,fastq_1,fastq_2
+ERR123,/data/ERR123_1.fastq.gz,/data/ERR123_2.fastq.gz
+SRR456,/data/SRR456.fastq.gz,
 ```
+
+### 2. Список SRA accession (`--sra_ids`)
+
+Текстовый файл: один accession на строку.
+
+**Пример:**
+```text
+SRR32010433
+ERR15166664
+```
+
+Пайплайн скачивает данные через nf-core modules `sratools/prefetch` и `sratools/fasterqdump`, автоматически определяет single-end/paired-end layout и публикует полученные FASTQ в `outdir/sra_fastq/`.
 
 ---
 
@@ -99,15 +110,15 @@ run.csv
     ▼
 ┌─────────────────────────────────────┐
 │ 1. TRIMMING (fastp)                 │  Тримминг адаптеров, polyG, качества
-│    Модули: fastp, repair_reads      │  repair_reads — опционально (BBMap)
+│    nf-core: fastp                  │
 └─────────────┬───────────────────────┘
               │
     ┌─────────┴─────────┐
     ▼                   ▼
 ┌──────────┐    ┌──────────────────────┐
 │ 2. QC    │    │ 3. MAPPING           │
-│ (FastQC) │    │ BWA-mem → SAMtools   │
-│          │    │ → Picard MarkDups    │
+│ (FastQC) │    │ nf-core bwa/mem      │
+│          │    │ → picard/markduplicates │
 └──────────┘    └─────────┬────────────┘
                           │
                           ▼
@@ -161,46 +172,43 @@ run.csv
 4. Только «хорошие» образцы продолжают путь через вызов вариантов (Freebayes) и генотипирование
 5. Генотипирование запускает **6 параллельных инструментов** для определения линии, споликотипа, делеций, покрытия и лекарственной устойчивости
 6. Все результаты собираются в итоговые отчёты (MultiQC + FINAL_TABLE.xlsx)
-7. При наличии > 1 образца запускается когортный анализ (ANN_TABLE)
+7. При наличии > 1 образца и если не задан `--skip_snp_matrix`, запускается когортный анализ (ANN_TABLE)
 
 **Ключевые точки ветвления:**
 
 - **После TRIMMING** → данные идут в QC (параллельно) и MAPPING
 - **После FILTER** → «хорошие» образцы передаются в CALLVAR и GENOTYPE; «плохие» записываются в `bad_reads_low_coverage.txt`
-- **После CALLVAR** → VCF используется одновременно для GENOTYPE (TBLG-классификация), REPORTS (bcftools_stats) и ANN_TABLE (когортное объединение)
+- **После CALLVAR** → VCF используется одновременно для GENOTYPE (TBLG-классификация), REPORTS (bcftools_stats) и, при необходимости, ANN_TABLE (когортное объединение)
 - **GENOTYPE** → все 6 модулей запускаются **параллельно** друг другу
 
 ### Подробное описание этапов
 
 #### 1. TRIMMING — Тримминг ридов
 
-**Модули:** `fastp`, `repair_reads` (опционально)
+**Модули:** nf-core `fastp`
 
 - **fastp** — обрезка адаптеров (автодетекция), polyG-хвостов, фильтрация по качеству
-- **repair_reads** (BBMap repair.sh) — восстановление сломанных пар (если нужно)
-
-**Выход:** Триммированные FASTQ-файлы
+**Выход:** Триммированные FASTQ-файлы и JSON/HTML-отчёты fastp
 
 #### 2. QC — Контроль качества
 
-**Модуль:** `fastqc`
+**Модуль:** nf-core `fastqc`
 
 - Генерация отчётов FastQC для каждого образца
 - Оценка качества секвенирования, GC-состава, длин ридов
 
 #### 3. MAPPING — Картирование
 
-**Модули:** `bwa_index`, `bwa_picard`
+**Модули:** nf-core `bwa/index`, `bwa/mem`, `samtools/faidx`, `picard/markduplicates`
 
 - **BWA-mem** — выравнивание ридов на референс H37Rv
-- **SAMtools** — сортировка и индексация BAM
-- **Picard MarkDuplicates** — маркировка PCR-дупликатов
+- **Picard MarkDuplicates** — маркировка PCR-дупликатов и построение BAM index
 
 **Выход:** Отсортированные, дедуплицированные BAM-файлы
 
 #### 4. FILTER — Фильтрация образцов
 
-**Модули:** `tb_mix`, `map_stats`, `samtools_stats`
+**Модули:** local `tb_mix`, nf-core `picard/collectwgsmetrics`, `picard/collectalignmentsummarymetrics`, `samtools/stats`, `samtools/flagstat`
 
 Это **критический этап**, который разделяет образцы на два потока. Три модуля запускаются параллельно:
 
@@ -213,15 +221,15 @@ run.csv
 
 Метрики каждого образца собираются в единый канал через `join()`. Затем фильтр отсеивает образцы по **медианному покрытию** (единственный активный фильтр):
 
-- Медианное покрытие >= 10X (`min_median`) — **активный фильтр**
-- Среднее покрытие >= 10X (`min_mean_cov`) — определён, но закомментирован
-- % выравненных >= 80% (`min_align_pct`) — определён, но закомментирован
+- Медианное покрытие >= 30X (`min_median`) — **активный фильтр**
+- Среднее покрытие >= 10X (`min_mean_cov`) — параметр определён, но сейчас не участвует в отборе
+- % выравненных > 90% (`min_align_pct`) — **активный фильтр**
 
 Образцы, не прошедшие фильтр → `bad_reads_low_coverage.txt` (с указанием причины). Прошедшие образцы передаются как `bam_good` и `trimmed_good` в последующие этапы
 
 #### 5. VARIANT CALLING — Вызов вариантов
 
-**Модули:** `freebayes` (основной), `bcftools`, `gatk` (альтернативные), `snpeff`, `rename_chr`, `bcftools_stats`
+**Модули:** nf-core `freebayes`, `bcftools/index`, `bcftools/norm`, `bcftools/view`, `bcftools/stats`, `bcftools/annotate`, `snpeff/snpeff`
 
 **Freebayes** (основной вариант-каллер):
 - Гаплоидный режим (`--ploidy 1`) — TB не имеет диплоидного генома
@@ -231,10 +239,10 @@ run.csv
 - Минимальная частота альтернативного аллеля: 80%
 
 **Постобработка:**
-- BCFtools norm — нормализация VCF
-- BCFtools filter — фильтрация по QUAL >= 10
-- SnpEff — аннотация вариантов (эффект на гены, аминокислотные замены)
-- Переименование хромосом (chr.txt) для совместимости
+- BCFtools index + norm — индексация и нормализация VCF
+- BCFtools view — фильтрация по `QUAL >= 10` и `INFO/DP >= 10`
+- BCFtools annotate `--rename-chrs` — переименование хромосом по `chr.txt`
+- SnpEff — аннотация вариантов
 
 #### 6. GENOTYPING — Генотипирование
 
@@ -243,11 +251,11 @@ run.csv
 | Модуль | Инструмент | Что делает |
 |--------|-----------|------------|
 | `spotyping` | SpoTyping | Определяет споликотип (24-спейсерный бинарный код) |
-| `ismapper` | ISMapper | Картирование IS6110 (только для парных ридов) |
-| `mosdepth` | Mosdepth | Быстрый расчёт глубины покрытия |
+| `ismapper` | nf-core `ismapper` | Картирование IS6110 (только для парных ридов) |
+| `mosdepth` | nf-core `mosdepth` | Быстрый расчёт глубины покрытия |
 | `rd` | rd.py | Анализ Region of Difference (RD) для линии |
 | `tblg` | TBLG | Классификация линии (L1–L7) по VCF |
-| `tb_profiler` | TB-Profiler | Предсказание лекарственной устойчивости |
+| `tb_profiler` | nf-core `tbprofiler/profile` | Предсказание лекарственной устойчивости |
 
 #### 7. REPORTS — Отчёты
 
@@ -261,7 +269,7 @@ run.csv
   - Лекарственная устойчивость
   - Метрики качества
 - **TB_PLATFORM_TABLES** — генерирует набор отдельных таблиц для интеграции с платформами:
-  - `general.tsv` — общая таблица метрик из MultiQC
+  - `general.tsv` — общая таблица метрик напрямую из raw Picard / samtools / bcftools outputs, без зависимости от MultiQC
   - `filter.tbmix.tsv` — результаты TB-Mix с аннотацией линий из TBLG
   - `dr.xlsx` — таблица лекарственной устойчивости из TB-Profiler
   - `dr_other_variants.xlsx` — дополнительные варианты, не связанные с устойчивостью
@@ -270,14 +278,14 @@ run.csv
 
 #### 8. ANN_TABLE — Когортная таблица аннотаций
 
-**Модули:** `merge`, `snpeff_ann`, `make_table`, `post_process_table`
+**Модули:** nf-core `bcftools/merge`, nf-core `snpeff/snpeff`, локальные `make_table`, `post_process_table`
 
-> **Условие запуска:** ANN_TABLE запускается **только при наличии > 1 образца**. Для единственного образца этап пропускается с сообщением в лог.
+> **Условие запуска:** ANN_TABLE запускается **только при наличии > 1 образца** и если не задан `--skip_snp_matrix`.
 
 Этап строит **общую матрицу вариантов** для всей когорты:
 
-1. **MERGE** — объединение VCF-файлов всех образцов в один многосемпловый VCF (bcftools merge)
-2. **SNPEFF_ANN** — аннотация объединённого VCF через SnpEff (эффект мутаций, аминокислотные замены)
+1. **BCFTOOLS_MERGE** — объединение VCF-файлов всех образцов в один многосемпловый VCF
+2. **SNPEFF** — аннотация объединённого VCF через SnpEff
 3. **MAKE_TABLE** — извлечение полей через SnpSift extractFields → TSV-таблица с позициями, аллелями, генами и аннотациями
 4. **POST_PROCESS_TABLE** — постобработка: добавление информации о генах, стрендах, функциональных категориях; дедупликация записей
 
@@ -308,6 +316,8 @@ run.csv
 | `tb-platform/` | Таблицы для интеграции с платформами (general.tsv, dr.xlsx, rd.tsv и др.) |
 | **`FINAL_TABLE.xlsx`** | **Итоговая таблица со всеми результатами** |
 | `bad_reads_low_coverage.txt` | Список отфильтрованных образцов |
+
+Для работы SnpEff используется каталог данных, задаваемый параметром `--snpeff_data_dir`.
 
 ---
 
@@ -340,23 +350,38 @@ run.csv
 
 ```groovy
 params {
-    outdir        = "./results"           // Директория результатов
-    samples       = "run.csv"             // Файл с образцами
-    reference     = "assets/h37rv.fa"     // Референсный геном
-    mode          = 'link'                // link | copy (режим создания файлов)
+    input              = "run.csv"                    // FASTQ samplesheet
+    sra_ids            = null                         // Альтернативный вход: список SRA ID
+    outdir             = "./results"                 // Директория результатов
+    reference          = "assets/h37rv.fa"           // Референсный геном
+    snpeff_data_dir    = "snpEff_latest_core/snpEff/data" // Каталог данных SnpEff
+    kraken2_db         = null                        // База Kraken2
+    skip_kraken        = false
+    skip_multiqc       = false
+    skip_final_reports = false
+    mode               = 'link'                      // link | copy
 
     // Пороги фильтрации
-    min_median    = 10    // Мин. медианное покрытие (активный)
-    min_mean_cov  = 10    // Мин. среднее покрытие
-    min_align_pct = 80    // Мин. % выравненных ридов
+    min_median         = 30
+    min_mean_cov       = 10
+    min_align_pct      = 90
 }
 ```
 
 ### Профили запуска
 
-Пайплайн поддерживает два профиля: `local` (локальный/HPC) и `k8s` (Kubernetes).
+Стандартные runtime-профили:
 
-### Ресурсы (профиль `local`)
+- `docker` — основной профиль; фактически это режим по умолчанию
+- `singularity` — запуск через Singularity / Apptainer
+- `conda` — запуск через conda
+
+Для Kubernetes используется отдельный конфиг:
+
+- `-profile docker -c k8s.config`
+- `k8s.config` меняет только executor и Kubernetes-specific настройки
+
+### Ресурсы (локальный запуск)
 
 | Лейбл | CPU | Параллельных задач | Память |
 |---|---|---|---|
@@ -366,43 +391,53 @@ params {
 | `medium_mem` | — | — | 6 GB |
 | `big_mem` | — | — | 8 GB |
 
-### Ресурсы (профиль `k8s`)
+### Ресурсы (через `-c k8s.config`)
 
 | Лейбл | CPU | Память |
 |---|---|---|
-| по умолчанию | 3 | — |
-| `small_mem` | — | 1 GB |
-| `medium_mem` | — | 2 GB |
-| `big_mem` | — | 4 GB |
+| по умолчанию | 3 | задаётся кластером / профилем |
 
 ---
 
 ## Запуск
 
-### Локальный запуск (Singularity)
+### Запуск по FASTQ
 
 ```bash
-# 1. Собрать контейнеры (один раз)
-bash build-containers.sh
+# 1. Подготовить samplesheet
+python make_samplesheet.py -i data -o run.csv
 
-# 2. Подготовить run.csv с путями к FASTQ-файлам
-
-# 3. Запустить пайплайн
-nextflow run main.nf -profile local -resume
+# 2. Запустить пайплайн
+nextflow run main.nf --input run.csv -resume
 ```
 
-### Запуск через Docker (на сервере)
+### Запуск по SRA
 
 ```bash
-docker run --rm -it --privileged \
-    -v $(pwd)/data:/workspace/data \
-    -v $(pwd)/results:/workspace/results \
-    tb-lite:2025-07 \
-    run main.nf -with-singularity -resume
+printf "SRR32010433\nERR15166664\n" > sra_ids.txt
+nextflow run main.nf --sra_ids sra_ids.txt -resume
 ```
 
-> **Важно:** Флаг `--privileged` необходим для запуска Apptainer внутри Docker.
-> Рекомендуется перейти на нативный Docker-режим (см. раздел ниже).
+### Запуск с Kraken2/Bracken
+
+```bash
+nextflow run main.nf \
+  --input run.csv \
+  --kraken2_db /path/to/kraken_db \
+  -profile docker -resume
+```
+
+### Запуск через Singularity
+
+```bash
+nextflow run main.nf --input run.csv -profile singularity -resume
+```
+
+### Запуск в Kubernetes
+
+```bash
+nextflow run main.nf --input run.csv -profile docker -c k8s.config -resume
+```
 
 ---
 
@@ -410,9 +445,9 @@ docker run --rm -it --privileged \
 
 ### Текущая архитектура (Singularity)
 
-Каждый процесс запускается в своём Singularity-контейнере (.sif):
-- **13 кастомных** — собираются из `.def` файлов в `containers/def/`
-- **5 публичных** — скачиваются из Docker Hub (fastp, fastqc, bcftools, multiqc, picard)
+Для локальных кастомных модулей доступны отдельные Singularity-контейнеры (.sif):
+- **6 кастомных** — собираются из `.def` файлов в `containers/def/`
+- **5 публичных** — при необходимости подтягиваются отдельно (fastp, fastqc, bcftools, multiqc, picard)
 
 Скрипт сборки: `build-containers.sh`
 
@@ -424,21 +459,12 @@ docker run --rm -it --privileged \
 
 | Контейнер (.sif) | Базовый образ | Инструменты |
 |---|---|---|
-| ann_table.sif | python:3.12-slim | pandas, xlsxwriter, кастомные скрипты |
-| build_table.sif | python:3.12-slim | pandas, xlsxwriter, build_final_table.py |
-| bwa-picard.sif | ubuntu:20.04 | bwa, samtools, Picard 3.4.0 |
-| freebayes.sif | ubuntu:24.04 | freebayes 1.3.10, bcftools |
-| ismap.sif | python:3.8-slim | bwa, samtools, bedtools, blast, IS_mapper |
-| mosdpt.sif | ubuntu:22.04 | mosdepth 0.3.11 |
+| build_table.sif | python:3.12-slim | pandas, xlsxwriter, build_final_table.py, build_metrics_table.py |
+| tb_platform_tables.sif | python:3.12-slim | profiler_parser.py, deletions_to_csv.py, build_metrics_table.py |
 | rd.sif | python:3.11-slim | numpy, pandas, rd.py |
-| snpeff.sif | miniconda3 | snpEff 5.2 + БД H37Rv |
-| snpeff_table.sif | ubuntu:24.04 | snpEff, SnpSift, bcftools |
 | spotyping.sif | debian:bookworm-slim | SpoTyping 2.0, BLAST 2.12 |
 | tblg.sif | python:3.11-slim | tblg (pip) |
-| tb-lineage.sif | python:3.12-slim | pandas, pysam, tb-lineage.py |
 | tb_mix.sif | python:3.12-slim | pandas, pysam, tb_mix.py |
-| tbp.sif | miniconda3 | TB-Profiler 6.6.5 |
-| vcf2table.sif | python:3.12-slim | pandas, pysam, vcf2table.py |
 
 ---
 

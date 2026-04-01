@@ -1,62 +1,69 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
-    "$id": "https://raw.githubusercontent.com/tb-lite/master/nextflow_schema.json",
+    "$id": "https://raw.githubusercontent.com/tb-lite/main/nextflow_schema.json",
     "title": "TB-Lite pipeline parameters",
     "description": "Mycobacterium tuberculosis WGS analysis pipeline",
     "type": "object",
     "definitions": {
         "input_output_options": {
-            "title": "Input/output options",
+            "title": "Input / output options",
             "type": "object",
             "fa_icon": "fas fa-terminal",
-            "description": "Define where the pipeline should find input data and save output data.",
-            "required": ["samples", "outdir"],
             "properties": {
+                "input": {
+                    "type": "string",
+                    "description": "Path to FASTQ samplesheet CSV with columns sample,fastq_1,fastq_2. FASTQ paths must be *.fastq.gz or *.fq.gz."
+                },
                 "samples": {
                     "type": "string",
-                    "description": "Path to CSV samplesheet (Sample,R1,R2,Layout).",
-                    "fa_icon": "fas fa-file-csv"
+                    "description": "Deprecated alias for --input."
+                },
+                "sra_ids": {
+                    "type": "string",
+                    "description": "Path to text file with one SRA accession per line."
                 },
                 "outdir": {
                     "type": "string",
                     "default": "./results",
-                    "description": "The output directory where results will be saved.",
-                    "fa_icon": "fas fa-folder-open"
+                    "description": "Output directory."
                 },
                 "mode": {
                     "type": "string",
                     "default": "copy",
-                    "description": "publishDir mode: copy or link.",
-                    "enum": ["copy", "link"]
+                    "description": "publishDir mode.",
+                    "enum": ["copy", "link", "move", "symlink", "rellink"]
                 }
             }
         },
         "reference_genome": {
-            "title": "Reference genome",
+            "title": "Reference and annotation options",
             "type": "object",
             "fa_icon": "fas fa-dna",
-            "description": "Reference genome and annotation files.",
             "properties": {
                 "reference": {
                     "type": "string",
-                    "description": "Path to reference genome FASTA (H37Rv)."
+                    "description": "Reference genome FASTA."
                 },
                 "gff": {
                     "type": "string",
-                    "description": "Path to GFF3 annotation file."
+                    "description": "Optional GFF3 annotation file."
                 },
                 "gbk": {
                     "type": "string",
-                    "description": "Path to GenBank reference file."
+                    "description": "Reference GenBank file."
                 },
                 "snpeff_db": {
                     "type": "string",
                     "default": "Mycobacterium_tuberculosis_h37rv",
                     "description": "SnpEff database name."
                 },
+                "snpeff_data_dir": {
+                    "type": "string",
+                    "description": "Path to SnpEff data directory mounted into the container."
+                },
                 "chr_name": {
                     "type": "string",
-                    "description": "Path to chromosome name mapping file."
+                    "description": "Chromosome name mapping file."
                 }
             }
         },
@@ -64,62 +71,75 @@
             "title": "Genotyping options",
             "type": "object",
             "fa_icon": "fas fa-microscope",
-            "description": "Options for genotyping analyses.",
             "properties": {
                 "rd_db": {
                     "type": "string",
-                    "description": "Path to Region of Difference BED file."
+                    "description": "Region of Difference BED file."
                 },
                 "is6110": {
                     "type": "string",
-                    "description": "Path to IS6110 FASTA for ISMapper."
+                    "description": "IS6110 FASTA for ISMapper."
                 },
                 "ref_gbk": {
                     "type": "string",
-                    "description": "Path to GenBank reference for ISMapper."
+                    "description": "Reference GenBank file for ISMapper."
                 },
                 "levels": {
                     "type": "string",
-                    "description": "Path to TB-Mix levels TSV file."
+                    "description": "TB-Mix levels TSV."
                 }
             }
         },
         "annotation_options": {
-            "title": "Annotation options",
+            "title": "Annotation and tables",
             "type": "object",
             "fa_icon": "fas fa-tags",
-            "description": "Annotation table options.",
             "properties": {
                 "feature_table": {
                     "type": "string",
-                    "description": "Path to VCF-to-table feature table."
+                    "description": "Feature table for VCF-to-table conversion."
                 },
                 "h37rv_feature_table": {
                     "type": "string",
-                    "description": "Path to H37Rv SnpEff annotation feature table."
+                    "description": "Feature table for H37Rv SnpEff annotation."
                 }
             }
         },
         "filtering_options": {
-            "title": "Filtering options",
+            "title": "Filtering thresholds",
             "type": "object",
             "fa_icon": "fas fa-filter",
-            "description": "Quality filtering thresholds.",
             "properties": {
                 "min_align_pct": {
                     "type": "integer",
-                    "default": 80,
-                    "description": "Minimum alignment percentage to pass filter."
+                    "default": 90,
+                    "description": "Mapped reads percentage threshold. Samples pass when reads_mapped_pct is greater than this value."
                 },
                 "min_mean_cov": {
                     "type": "integer",
                     "default": 10,
-                    "description": "Minimum mean coverage to pass filter."
+                    "description": "Minimum mean coverage."
                 },
                 "min_median": {
                     "type": "integer",
-                    "default": 10,
-                    "description": "Minimum median coverage to pass filter."
+                    "default": 30,
+                    "description": "Minimum median coverage."
+                }
+            }
+        },
+        "kraken_options": {
+            "title": "Kraken / Bracken",
+            "type": "object",
+            "fa_icon": "fas fa-bacteria",
+            "properties": {
+                "kraken2_db": {
+                    "type": "string",
+                    "description": "Kraken2 database path."
+                },
+                "skip_kraken": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip Kraken2/Bracken branch."
                 }
             }
         },
@@ -127,24 +147,46 @@
             "title": "Reporting options",
             "type": "object",
             "fa_icon": "fas fa-chart-bar",
-            "description": "Report generation options.",
             "properties": {
                 "skip_reports": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Skip MultiQC and final report generation."
+                    "description": "Deprecated alias for skipping both MultiQC and final reports."
+                },
+                "skip_multiqc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip MultiQC generation."
+                },
+                "skip_final_reports": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip final TB reports."
+                },
+                "skip_snp_matrix": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip cohort SNP matrix generation (ANN_TABLE)."
+                },
+                "skip_qc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip FastQC."
                 },
                 "multiqc": {
+                    "type": "string",
+                    "description": "Deprecated alias for --multiqc_config."
+                },
+                "multiqc_config": {
                     "type": "string",
                     "description": "Path to MultiQC configuration YAML."
                 }
             }
         },
         "container_options": {
-            "title": "Container options",
+            "title": "Container / runtime options",
             "type": "object",
             "fa_icon": "fas fa-box",
-            "description": "Container-related settings.",
             "properties": {
                 "sifDir": {
                     "type": "string",
@@ -172,6 +214,7 @@
         { "$ref": "#/definitions/genotyping_options" },
         { "$ref": "#/definitions/annotation_options" },
         { "$ref": "#/definitions/filtering_options" },
+        { "$ref": "#/definitions/kraken_options" },
         { "$ref": "#/definitions/reporting_options" },
         { "$ref": "#/definitions/container_options" },
         { "$ref": "#/definitions/generic_options" }
