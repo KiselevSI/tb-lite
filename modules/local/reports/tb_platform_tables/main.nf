@@ -1,7 +1,12 @@
 process TB_PLATFORM_TABLES {
     tag "Final Table"
-    label 'small_mem'
-    publishDir "${params.outdir}/tb-platform", mode: params.mode
+    label 'process_single'
+    publishDir "${params.outdir}/Reports/tb-platform", mode: params.mode
+
+    conda "${moduleDir}/environment.yml"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'docker://tb-lite/tb-platform-tables:1.1' :
+        'tb-lite/tb-platform-tables:1.1' }"
 
     input:
     path wgs_metrics
@@ -16,19 +21,19 @@ process TB_PLATFORM_TABLES {
 
     output:
     path "filter.tbmix.tsv"
-    path "dr.xlsx"
-    path "dr_other_variants.xlsx"
+    path "drug_resist.xlsx"
+    path "drug_resist_and_uncertain.xlsx"
     path "general.tsv"
     path "spotyping.total.tsv"
     path "rd.tsv"
-    
+
 
     script:
     """
-    build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
+    python ${projectDir}/bin/build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
-    
+
 
     echo -e "Sample\\tSpolBin\\tSpol8" > spotyping.total.tsv
 
@@ -36,11 +41,13 @@ process TB_PLATFORM_TABLES {
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tblg_table  > tblg.total.tsv
 
-    filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
+    python ${projectDir}/bin/filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
-    profiler_parser.py -i $drugs -g $gbk --flat-header --also-other-variants -o dr.xlsx
+    python ${projectDir}/bin/profiler_parser.py -i $drugs -g $gbk --flat-header -o drug_resist.xlsx
 
-    deletions_to_csv.py -i $rd -o rd.tsv
-    
+    python ${projectDir}/bin/profiler_parser.py -i $drugs -g $gbk --flat-header --include-other-uncertain -o drug_resist_and_uncertain.xlsx
+
+    python ${projectDir}/bin/deletions_to_csv.py -i $rd -o rd.tsv
+
     """
 }

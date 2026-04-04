@@ -1,7 +1,14 @@
 process FINAL_TABLE {
     tag "Final Table"
-    label 'small_mem'
-    publishDir "${params.outdir}", mode: params.mode
+    label 'process_single'
+    publishDir "${params.outdir}/Reports/general",
+        mode: params.mode,
+        saveAs: { filename -> ['FINAL_TABLE.xlsx', 'drug_resist.xlsx'].contains(filename) ? filename : null }
+
+    conda "${moduleDir}/environment.yml"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'docker://tb-lite/build-table:1.1' :
+        'tb-lite/build-table:1.1' }"
 
     input:
     path wgs_metrics
@@ -11,17 +18,25 @@ process FINAL_TABLE {
     path spotyping
     path tblg_table
     path drugs
+    path gbk
+    path kraken_combined
 
     output:
     path "*"
-    
+
 
     script:
+    def krakenInputs = kraken_combined ? kraken_combined.collect { it.getName() }.join(' ') : ''
+    def tableInputs = ['spotyping.total.tsv', 'filter.tbmix.tsv', 'tblg.total.tsv', 'tbmix.total.tsv']
+    if (kraken_combined) {
+        tableInputs << 'kraken.top_hits.tsv'
+    }
+    def buildFinalArgs = tableInputs.join(' ')
     """
-    build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
+    python ${projectDir}/bin/build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
-    
+
 
     echo -e "Sample\\tSpolBin\\tSpol8" > spotyping.total.tsv
 
@@ -29,12 +44,14 @@ process FINAL_TABLE {
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tblg_table  > tblg.total.tsv
 
-    filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
+    python ${projectDir}/bin/filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
-    dr_parser.py -i $drugs -o dr.xlsx
-  
-    build_final_table.py --base-table general.tsv --dr dr.xlsx -t spotyping.total.tsv filter.tbmix.tsv tblg.total.tsv tbmix.total.tsv --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
+    python ${projectDir}/bin/profiler_parser.py -i $drugs -g $gbk --include-other-uncertain -o drug_resist.xlsx
 
-    
+    ${ kraken_combined ? "python ${projectDir}/bin/kraken_top_hits.py -i ${krakenInputs} -o kraken.top_hits.tsv" : "" }
+
+    python ${projectDir}/bin/build_final_table.py --base-table general.tsv --dr drug_resist.xlsx -t ${buildFinalArgs} --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
+
+
     """
 }

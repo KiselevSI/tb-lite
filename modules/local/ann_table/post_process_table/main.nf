@@ -1,9 +1,13 @@
 
 process POST_PROCESS_TABLE {
     tag        "SNPEFF_table"
-    label 'big_mem'
-    label 'solo_cpu'
-    publishDir "${params.outdir}/snpeff", mode: params.mode
+    label 'process_low'
+    publishDir "${params.outdir}/Reports/snp_matrix", mode: params.mode
+
+    conda "${moduleDir}/environment.yml"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'docker://tb-lite/ann-table:1.0' :
+        'tb-lite/ann-table:1.0' }"
 
     input:
         path tsv
@@ -12,7 +16,7 @@ process POST_PROCESS_TABLE {
     output:
         path "FINAL_ANNOTATION_TABLE.tsv", emit: clean
 
-    script: 
+    script:
     """
     awk -v OFS="\t" 'BEGIN{FS="\t"} {for(i=1;i<=NF;i++) if(\$i==".") \$i=""; print}' "${tsv}" > FINAL_ANNOTATION_TABLE_1.tsv
     add_name_strand.py -i FINAL_ANNOTATION_TABLE_1.tsv -t $feature_table -o FINAL_ANNOTATION_TABLE_2.tsv

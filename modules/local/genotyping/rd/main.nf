@@ -1,8 +1,12 @@
 process RD {
     tag "RD: ${sample_name}"
-    label 'small_mem'
-    label 'solo_cpu'
+    label 'process_single'
     publishDir "${params.outdir}/rd/${sample_name}", mode: params.mode
+
+    conda "${moduleDir}/environment.yml"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'docker://tb-lite/rd-scanner:1.0' :
+        'tb-lite/rd-scanner:1.0' }"
 
     input:
         tuple val(sample_name), path(bed)

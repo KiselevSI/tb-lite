@@ -1,8 +1,12 @@
 process SPOTYPING {
     tag        "SpoTyping: $sample_name"
-    label 'medium_mem'
-    label 'solo_cpu'
+    label 'process_low'
     publishDir "${params.outdir}/spotyping/$sample_name", mode: params.mode
+
+    conda "${moduleDir}/environment.yml"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'docker://tb-lite/spotyping:2.0' :
+        'tb-lite/spotyping:2.0' }"
 
     input:
         tuple val(sample_name), path(fastq_files)

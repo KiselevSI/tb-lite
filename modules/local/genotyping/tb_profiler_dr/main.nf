@@ -4,6 +4,11 @@ process TB_PROFILER_DR {
 
     publishDir "${params.outdir}/tb-profiler/drug-resist", mode: params.mode
 
+    conda "${moduleDir}/environment.yml"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'docker://staphb/tbprofiler:6.6.6' :
+        'staphb/tbprofiler:6.6.6' }"
+
     input:
     tuple val(sample_name), path(bam), path(bam_idx)
 

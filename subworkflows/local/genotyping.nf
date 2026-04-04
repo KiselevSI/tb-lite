@@ -48,7 +48,7 @@ workflow GENOTYPE {
 
         ismapper_reads = PREPARE_ISMAPPER_READS.out.reads
             .map { sample_name, files ->
-                [[id: sample_name], files.sort { it.name }, file(params.ref_gbk), file(params.is6110)]
+                [[id: sample_name], files.sort { it.name }, file(params.gbk), file(params.is6110)]
             }
 
         ISMAPPER(ismapper_reads)

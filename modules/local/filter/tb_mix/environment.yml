@@ -1,0 +1,8 @@
+---
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::python=3.12
+  - conda-forge::pandas<3
+  - bioconda::pysam

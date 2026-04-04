@@ -45,9 +45,9 @@ tb-lite/
 │
 ├── assets/                    # Референсные данные
 │   ├── h37rv.fa               # Референсный геном H37Rv
+│   ├── h37rv.gbk              # GenBank-файл H37Rv
 │   ├── rd/RD.bed              # Регионы различий (RD)
 │   ├── ismap/is6110.fasta     # Последовательность IS6110
-│   ├── ismap/h37rv.gbk        # GenBank-файл H37Rv
 │   ├── chr_name/chr.txt       # Маппинг имён хромосом
 │   ├── tbmix/levels.tsv       # Уровни для детекции смешанных инфекций
 │   ├── vcf2table/feature_table.tsv
@@ -355,7 +355,10 @@ params {
     outdir             = "./results"                 // Директория результатов
     reference          = "assets/h37rv.fa"           // Референсный геном
     snpeff_data_dir    = "snpEff_latest_core/snpEff/data" // Каталог данных SnpEff
-    kraken2_db         = null                        // База Kraken2
+    kraken2_db         = null                        // Первая база Kraken2
+    kraken2_db_label   = null                        // Необязательная метка для первой базы
+    kraken2_db_2       = null                        // Необязательная вторая база Kraken2
+    kraken2_db_label_2 = null                        // Необязательная метка для второй базы
     skip_kraken        = false
     skip_multiqc       = false
     skip_final_reports = false
@@ -424,6 +427,18 @@ nextflow run main.nf --sra_ids sra_ids.txt -resume
 nextflow run main.nf \
   --input run.csv \
   --kraken2_db /path/to/kraken_db \
+  -profile docker -resume
+```
+
+### Запуск с двумя базами Kraken2/Bracken
+
+```bash
+nextflow run main.nf \
+  --input run.csv \
+  --kraken2_db /path/to/db1 \
+  --kraken2_db_label bacteria \
+  --kraken2_db_2 /path/to/db2 \
+  --kraken2_db_label_2 viruses \
   -profile docker -resume
 ```
 

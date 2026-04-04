@@ -6,15 +6,24 @@ process SRA_DETECT_LAYOUT {
     tag "${meta.id}"
     label 'process_low'
 
+    conda "bioconda::sra-tools=3.2.1 conda-forge::pigz=2.8"
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'https://depot.galaxyproject.org/singularity/sra-tools:3.2.1--h4304569_1' :
+        'quay.io/biocontainers/sra-tools:3.2.1--h4304569_1' }"
+
     input:
     tuple val(meta), path(sra)
 
     output:
-    tuple val(meta), path("${meta.id}"), path('layout.txt')
+    tuple val(meta), path(sra), path('layout.txt'), emit: sra
 
     script:
     """
-    sra_file=\$(find ${sra} -type f -name '*.sra' | head -n 1)
+    if [[ -f "${sra}" && "${sra}" == *.sra ]]; then
+        sra_file="${sra}"
+    else
+        sra_file=\$(find -L ${sra} -type f -name '*.sra' | head -n 1)
+    fi
 
     if [[ -z "\$sra_file" ]]; then
         echo "ERROR: prefetched SRA file for ${meta.id} not found under ${sra}" >&2
@@ -27,7 +36,6 @@ process SRA_DETECT_LAYOUT {
         --threads 1 \\
         --split-files \\
         --skip-technical \\
-        -X 1 \\
         --outdir preview \\
         "\$sra_file"
 

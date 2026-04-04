@@ -104,7 +104,7 @@ workflow FILTER {
 
         bad_with_header.collectFile(
             name:     'bad_reads_low_coverage.txt',
-            storeDir: params.outdir,
+            storeDir: "${params.outdir}/Reports/general",
             newLine:  true,
             sort:     false   // сортировать теперь не нужно (мы уже включили header)
         )

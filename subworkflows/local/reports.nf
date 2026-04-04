@@ -12,6 +12,7 @@ workflow REPORTS {
         samtools_stats
         samtools_flagstat
         kraken_reports
+        kraken_combined
         tbmix
         spotyping
         tblg_table
@@ -23,6 +24,9 @@ workflow REPORTS {
         skip_final_reports = params.skip_final_reports || params.skip_reports
         final_table = Channel.empty()
         rd = del.map { _sample_name, path -> path }  // извлекаем только пути из канала del
+        kraken_combined_tables = (!params.skip_kraken && params.kraken2_db)
+            ? kraken_combined.map { meta, path -> path }.collect()
+            : Channel.value([])
 
         gbk = Channel.value(file(params.gbk))
 
@@ -65,7 +69,9 @@ workflow REPORTS {
                 tbmix.collect(),
                 spotyping.collect(),
                 tblg_table.collect(),
-                drugs.collect()
+                drugs.collect(),
+                gbk,
+                kraken_combined_tables
             )
         }
 

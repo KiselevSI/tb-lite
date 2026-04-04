@@ -1,0 +1,7 @@
+---
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::tb-profiler=6.6.6
+  - bioconda::samtools

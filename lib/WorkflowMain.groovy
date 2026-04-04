@@ -40,7 +40,10 @@ class WorkflowMain {
               --outdir              Output directory [default: ./results]
               --reference           Reference genome FASTA [default: assets/h37rv.fa]
               --snpeff_data_dir     Path to SnpEff data directory [default: snpEff_latest_core/snpEff/data]
-              --kraken2_db          Kraken2 database path
+              --kraken2_db          Path to first Kraken2 database
+              --kraken2_db_label    Optional label for first Kraken2 database
+              --kraken2_db_2        Optional path to second Kraken2 database
+              --kraken2_db_label_2  Optional label for second Kraken2 database
               --skip_kraken         Skip Kraken2/Bracken branch [default: false]
               --skip_multiqc        Skip MultiQC generation [default: false]
               --skip_final_reports  Skip final TB reports [default: false]
@@ -77,6 +80,9 @@ class WorkflowMain {
         reference          : ${params.reference}
         snpeff_data_dir    : ${params.snpeff_data_dir}
         kraken2_db         : ${params.kraken2_db ?: '(disabled)'}
+        kraken2_db_label   : ${params.kraken2_db_label ?: '(auto)'}
+        kraken2_db_2       : ${params.kraken2_db_2 ?: '(disabled)'}
+        kraken2_db_label_2 : ${params.kraken2_db_label_2 ?: '(auto)'}
         skip_qc            : ${params.skip_qc}
         skip_kraken        : ${params.skip_kraken}
         skip_multiqc       : ${skipMultiqc}

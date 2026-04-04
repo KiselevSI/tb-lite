@@ -19,6 +19,7 @@ workflow TBLITE {
     ch_reads = Channel.empty()
     ch_fastqc = Channel.empty()
     ch_kraken_multiqc = Channel.empty()
+    ch_kraken_combined = Channel.empty()
 
     if (resolved_input) {
         INPUT_CHECK(resolved_input)
@@ -44,6 +45,7 @@ workflow TBLITE {
         }
         kraken = KRAKEN(kraken_reads)
         ch_kraken_multiqc = kraken.multiqc
+        ch_kraken_combined = kraken.combined
     }
 
     callvar = CALLVAR(filt.bam_good)
@@ -62,6 +64,7 @@ workflow TBLITE {
             filt.samtools_stat,
             filt.samtools_flagstat,
             ch_kraken_multiqc,
+            ch_kraken_combined,
             filt.tbmix,
             gen.spol_table,
             gen.tblg_table,

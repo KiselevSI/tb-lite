@@ -1,6 +1,7 @@
 
 include { MAKE_TABLE } from '../../modules/local/ann_table/make_table/main'
 include { BCFTOOLS_MERGE as ANN_BCFTOOLS_MERGE } from '../../modules/nf-core/bcftools/merge/main'
+include { BCFTOOLS_ANNOTATE as ANN_BCFTOOLS_ANNOTATE } from '../../modules/nf-core/bcftools/annotate/main'
 include { SNPEFF_SNPEFF as ANN_SNPEFF } from '../../modules/nf-core/snpeff/snpeff/main'
 include { BCFTOOLS_VIEW as ANN_BCFTOOLS_VIEW } from '../../modules/nf-core/bcftools/view/main'
 include { POST_PROCESS_TABLE } from '../../modules/local/ann_table/post_process_table/main'
@@ -54,7 +55,19 @@ workflow ANN_TABLE {
         }
 
         ANN_BCFTOOLS_MERGE(merge_input, ref)
-        ANN_SNPEFF(ANN_BCFTOOLS_MERGE.out.vcf, params.snpeff_db, snpeff_cache)
+
+        if (params.snpeff_db == "Mycobacterium_tuberculosis_h37rv") {
+            chr_name = file(params.chr_name)
+            ann_rename_input = ANN_BCFTOOLS_MERGE.out.vcf.map { meta, vcf ->
+                [meta, vcf, [], [], [], [], [], chr_name]
+            }
+            ANN_BCFTOOLS_ANNOTATE(ann_rename_input)
+            ann_snpeff_input = ANN_BCFTOOLS_ANNOTATE.out.vcf
+        } else {
+            ann_snpeff_input = ANN_BCFTOOLS_MERGE.out.vcf
+        }
+
+        ANN_SNPEFF(ann_snpeff_input, params.snpeff_db, snpeff_cache)
 
         ann_view_input = ANN_SNPEFF.out.vcf.map { meta, vcf ->
             [meta, vcf, []]

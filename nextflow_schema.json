@@ -50,11 +50,11 @@
                 },
                 "gbk": {
                     "type": "string",
-                    "description": "Reference GenBank file."
+                    "description": "Reference GenBank file used by ISMapper and TB platform reporting."
                 },
                 "snpeff_db": {
                     "type": "string",
-                    "default": "Mycobacterium_tuberculosis_h37rv",
+                    "default": "h37rv_custom",
                     "description": "SnpEff database name."
                 },
                 "snpeff_data_dir": {
@@ -79,10 +79,6 @@
                 "is6110": {
                     "type": "string",
                     "description": "IS6110 FASTA for ISMapper."
-                },
-                "ref_gbk": {
-                    "type": "string",
-                    "description": "Reference GenBank file for ISMapper."
                 },
                 "levels": {
                     "type": "string",
@@ -134,7 +130,19 @@
             "properties": {
                 "kraken2_db": {
                     "type": "string",
-                    "description": "Kraken2 database path."
+                    "description": "Path to the first Kraken2 database."
+                },
+                "kraken2_db_label": {
+                    "type": "string",
+                    "description": "Optional label for the first Kraken2 database. Defaults to sanitized database basename."
+                },
+                "kraken2_db_2": {
+                    "type": "string",
+                    "description": "Optional path to the second Kraken2 database."
+                },
+                "kraken2_db_label_2": {
+                    "type": "string",
+                    "description": "Optional label for the second Kraken2 database. Defaults to sanitized database basename."
                 },
                 "skip_kraken": {
                     "type": "boolean",

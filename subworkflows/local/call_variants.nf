@@ -92,12 +92,19 @@ workflow CALLVAR {
             tuple(meta.id, vcf_file, vcf_index)
         }
 
-        renamed_vcf_input = filtered_vcf.map { meta, vcf_file, vcf_index ->
-            [meta, vcf_file, vcf_index, [], [], [], [], chr_name]
+        if (params.snpeff_db == "Mycobacterium_tuberculosis_h37rv") {
+            renamed_vcf_input = filtered_vcf.map { meta, vcf_file, vcf_index ->
+                [meta, vcf_file, vcf_index, [], [], [], [], chr_name]
+            }
+            BCFTOOLS_ANNOTATE(renamed_vcf_input)
+            snpeff_input = BCFTOOLS_ANNOTATE.out.vcf
+        } else {
+            snpeff_input = filtered_vcf.map { meta, vcf_file, vcf_index ->
+                [meta, vcf_file]
+            }
         }
 
-        BCFTOOLS_ANNOTATE(renamed_vcf_input)
-        SNPEFF_SNPEFF(BCFTOOLS_ANNOTATE.out.vcf, params.snpeff_db, snpeff_cache)
+        SNPEFF_SNPEFF(snpeff_input, params.snpeff_db, snpeff_cache)
 
         bcftools_stats = BCFTOOLS_STATS.out.stats.map { meta, stats_file -> stats_file }
         ann = SNPEFF_SNPEFF.out.vcf.map { meta, ann_vcf ->

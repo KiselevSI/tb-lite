@@ -1,8 +1,12 @@
 process MAKE_TABLE {
   tag        "SNPEFF_table"
-  label 'big_mem'
-  label 'solo_cpu'
-  publishDir "${params.outdir}/snpeff", mode: params.mode
+  label 'process_low'
+  publishDir "${params.outdir}/Reports/snp_matrix", mode: params.mode
+
+  conda "${moduleDir}/environment.yml"
+  container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+      'docker://tb-lite/ann-table:1.0' :
+      'tb-lite/ann-table:1.0' }"
 
   input:
     tuple path(vcf), path(tbi)
@@ -12,8 +16,11 @@ process MAKE_TABLE {
 
   script:
   """
+  SNPSIFT_BIN=\$(command -v SnpSift || command -v snpSift || true)
+  [[ -n "\$SNPSIFT_BIN" ]] || { echo "Neither SnpSift nor snpSift found in PATH" >&2; exit 127; }
+
   # 1) Левый блок c шапкой от SnpSift (добавлены *_LEN)
-  snpSift extractFields -e "." -s "," "$vcf" \
+  "\$SNPSIFT_BIN" extractFields -e "." -s "," "$vcf" \
     CHROM POS REF ALT QUAL \
     "ANN[*].EFFECT" "ANN[*].IMPACT" "ANN[*].GENE" "ANN[*].GENEID" \
     "ANN[*].FEATUREID" "ANN[*].BIOTYPE" "ANN[*].RANK" \
