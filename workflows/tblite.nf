@@ -37,21 +37,21 @@ workflow TBLITE {
     }
 
     maps = MAPPING(trim.trimmed_reads_legacy)
-    filt = FILTER(trim.trimmed_reads_legacy, maps.bam)
+    filt = FILTER(trim.trimmed_reads_legacy, maps.bam, maps.ref_fai)
 
     if (!params.skip_kraken && params.kraken2_db) {
-        kraken_reads = filt.trimmed_good.map { sample_name, reads ->
-            [[id: sample_name, single_end: reads.size() == 1], reads]
+        kraken_reads = trim.trimmed_reads.map { meta, reads ->
+            [meta + [single_end: reads.size() == 1], reads]
         }
         kraken = KRAKEN(kraken_reads)
         ch_kraken_multiqc = kraken.multiqc
         ch_kraken_combined = kraken.combined
     }
 
-    callvar = CALLVAR(filt.bam_good)
+    callvar = CALLVAR(filt.bam_good, maps.ref_fai)
     gen = GENOTYPE(filt.trimmed_good, callvar.vcf, filt.bam_good)
     if (!params.skip_snp_matrix) {
-        ANN_TABLE(callvar.other_count)
+        ANN_TABLE(callvar.other_count, maps.ref_fai)
     }
 
     if (!skip_multiqc || !skip_final_reports) {

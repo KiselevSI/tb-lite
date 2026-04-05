@@ -44,10 +44,6 @@
                     "type": "string",
                     "description": "Reference genome FASTA."
                 },
-                "gff": {
-                    "type": "string",
-                    "description": "Optional GFF3 annotation file."
-                },
                 "gbk": {
                     "type": "string",
                     "description": "Reference GenBank file used by ISMapper and TB platform reporting."
@@ -59,6 +55,7 @@
                 },
                 "snpeff_data_dir": {
                     "type": "string",
+                    "default": "assets/SNPEFF_ANNOTATION/data",
                     "description": "Path to SnpEff data directory mounted into the container."
                 },
                 "chr_name": {
@@ -91,10 +88,6 @@
             "type": "object",
             "fa_icon": "fas fa-tags",
             "properties": {
-                "feature_table": {
-                    "type": "string",
-                    "description": "Feature table for VCF-to-table conversion."
-                },
                 "h37rv_feature_table": {
                     "type": "string",
                     "description": "Feature table for H37Rv SnpEff annotation."
@@ -110,11 +103,6 @@
                     "type": "integer",
                     "default": 90,
                     "description": "Mapped reads percentage threshold. Samples pass when reads_mapped_pct is greater than this value."
-                },
-                "min_mean_cov": {
-                    "type": "integer",
-                    "default": 10,
-                    "description": "Minimum mean coverage."
                 },
                 "min_median": {
                     "type": "integer",
@@ -191,17 +179,6 @@
                 }
             }
         },
-        "container_options": {
-            "title": "Container / runtime options",
-            "type": "object",
-            "fa_icon": "fas fa-box",
-            "properties": {
-                "sifDir": {
-                    "type": "string",
-                    "description": "Directory for Singularity SIF images."
-                }
-            }
-        },
         "generic_options": {
             "title": "Generic options",
             "type": "object",
@@ -224,7 +201,6 @@
         { "$ref": "#/definitions/filtering_options" },
         { "$ref": "#/definitions/kraken_options" },
         { "$ref": "#/definitions/reporting_options" },
-        { "$ref": "#/definitions/container_options" },
         { "$ref": "#/definitions/generic_options" }
     ]
 }

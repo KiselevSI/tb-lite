@@ -12,6 +12,7 @@ process FINAL_TABLE {
 
     input:
     path wgs_metrics
+    path fastp_reports
     path bcftools_stats
     path samtools_flagstat
     path tbmix
@@ -27,13 +28,20 @@ process FINAL_TABLE {
 
     script:
     def krakenInputs = kraken_combined ? kraken_combined.collect { it.getName() }.join(' ') : ''
-    def tableInputs = ['spotyping.total.tsv', 'filter.tbmix.tsv', 'tblg.total.tsv', 'tbmix.total.tsv']
+    def tableInputs = ['general.tsv', 'spotyping.total.tsv', 'filter.tbmix.tsv', 'tblg.total.tsv', 'tbmix.total.tsv']
     if (kraken_combined) {
         tableInputs << 'kraken.top_hits.tsv'
     }
     def buildFinalArgs = tableInputs.join(' ')
     """
     python ${projectDir}/bin/build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
+
+    {
+        echo "ID"
+        for f in $fastp_reports; do
+            basename "\$f" .fastp.json
+        done | sort -u
+    } > all_samples.tsv
 
     awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
 
@@ -50,7 +58,7 @@ process FINAL_TABLE {
 
     ${ kraken_combined ? "python ${projectDir}/bin/kraken_top_hits.py -i ${krakenInputs} -o kraken.top_hits.tsv" : "" }
 
-    python ${projectDir}/bin/build_final_table.py --base-table general.tsv --dr drug_resist.xlsx -t ${buildFinalArgs} --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
+    python ${projectDir}/bin/build_final_table.py --base-table all_samples.tsv --dr drug_resist.xlsx -t ${buildFinalArgs} --join left --str-cols Spol8,SpolBin -o FINAL_TABLE.xlsx
 
 
     """

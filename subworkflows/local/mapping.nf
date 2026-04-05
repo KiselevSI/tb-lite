@@ -49,4 +49,5 @@ workflow MAPPING {
 
     emit:
         bam
+        ref_fai
 }

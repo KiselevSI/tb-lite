@@ -32,11 +32,11 @@ process COUNT_VARIANTS {
 workflow CALLVAR {
     take:
         bam_good
+        ref_fai
 
     main:
         ref_meta = [id: file(params.reference).baseName]
         ref = Channel.value([ref_meta, file(params.reference)])
-        ref_fai = Channel.value([ref_meta, file("${params.reference}.fai", checkIfExists: true)])
         snpeff_cache = Channel.value([[id: 'snpeff_cache'], file(params.snpeff_data_dir, checkIfExists: true)])
         chr_name = file(params.chr_name)
 

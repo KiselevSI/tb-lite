@@ -6,7 +6,6 @@
  * OUT: good_samples – val(sample_name)
  */
 include { TB_MIX } from '../../modules/local/filter/tb_mix/main'
-include { SAMTOOLS_FAIDX } from '../../modules/nf-core/samtools/faidx/main'
 include { PICARD_COLLECTWGSMETRICS } from '../../modules/nf-core/picard/collectwgsmetrics/main'
 include { PICARD_COLLECTALIGNMENTSUMMARYMETRICS } from '../../modules/nf-core/picard/collectalignmentsummarymetrics/main'
 include { SAMTOOLS_STATS } from '../../modules/nf-core/samtools/stats/main'
@@ -15,6 +14,7 @@ workflow FILTER {
     take:
         trimmed
         bam_all
+        ref_fai
     main:
         ref = Channel.value(file(params.reference))
         levels = Channel.value(file(params.levels))
@@ -22,9 +22,6 @@ workflow FILTER {
 
         ref_meta = [id: file(params.reference).baseName]
         ref_tuple = Channel.value([ref_meta, file(params.reference)])
-        ch_faidx_input = ref_tuple.map { meta, fasta -> [meta, fasta, []] }
-        SAMTOOLS_FAIDX(ch_faidx_input, false)
-        ref_fai = SAMTOOLS_FAIDX.out.fai
 
         ch_bam_meta = bam_all.map { sample_name, bam, bai ->
             [[id: sample_name], bam, bai]
@@ -101,10 +98,16 @@ workflow FILTER {
         bad_header = Channel.value("sample_id\treads_mapped_pct\tmean_coverage\tmedian_coverage")
 
         bad_with_header = bad_header.mix(bad_metrics)
+        bad_reads_name = params.batch_tag
+            ? "bad_reads_low_coverage.${params.batch_tag}.txt"
+            : 'bad_reads_low_coverage.txt'
+        bad_reads_dir = params.batch_tag
+            ? "${params.outdir}/batch_reports/filter"
+            : "${params.outdir}/Reports/general"
 
         bad_with_header.collectFile(
-            name:     'bad_reads_low_coverage.txt',
-            storeDir: "${params.outdir}/Reports/general",
+            name:     bad_reads_name,
+            storeDir: bad_reads_dir,
             newLine:  true,
             sort:     false   // сортировать теперь не нужно (мы уже включили header)
         )

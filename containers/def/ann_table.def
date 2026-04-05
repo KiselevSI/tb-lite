@@ -1,37 +1,39 @@
 Bootstrap: docker
-From: python:3.12-slim
+From: mambaorg/micromamba:2.0.5
 
-
-%files
-    snpEff_latest_core/snpEff /opt/snpEff
-    assets/scripts/add_name_strand.py /opt/add_name_strand.py
-    assets/scripts/dedup_ann_columns.py /opt/dedup_ann_columns.py
 
 %post
     set -e
 
+    export DEBIAN_FRONTEND=noninteractive
+    export MAMBA_ROOT_PREFIX=/opt/conda
+
     apt-get update \
       && apt-get install -y --no-install-recommends \
-         default-jre-headless \
-         bcftools \
          procps coreutils gawk grep sed findutils \
+         default-jre-headless \
       && rm -rf /var/lib/apt/lists/*
 
-    pip install --no-cache-dir pandas
+    micromamba install -y -n base -c conda-forge -c bioconda \
+      python=3.12 \
+      pandas \
+      bcftools \
+      snpsift \
+      && micromamba clean --all --yes
 
-    chmod +x /opt/add_name_strand.py
-    chmod +x /opt/dedup_ann_columns.py
-
-    printf '#!/bin/sh\nexec java -jar /opt/snpEff/SnpSift.jar "$@"\n' > /usr/local/bin/snpSift
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'JAR=$(find /opt/conda -name SnpSift.jar -print -quit)' \
+      '[ -n "$JAR" ] || { echo "SnpSift.jar not found under /opt/conda" >&2; exit 127; }' \
+      'exec java -jar "$JAR" "$@"' \
+      > /usr/local/bin/snpSift
     chmod +x /usr/local/bin/snpSift
-
-    ln -s /opt/add_name_strand.py /usr/local/bin/add_name_strand.py
-    ln -s /opt/dedup_ann_columns.py /usr/local/bin/dedup_ann_columns.py
+    ln -s /usr/local/bin/snpSift /usr/local/bin/SnpSift
 
 
 %environment
     export LC_ALL=C.UTF-8
     export LANG=C.UTF-8
-    export PATH=/opt:$PATH
     export PYTHONUNBUFFERED=1
-    export SNPEFF_HOME=/opt/snpEff
+    export MAMBA_ROOT_PREFIX=/opt/conda
+    export PATH=/opt/conda/bin:$PATH

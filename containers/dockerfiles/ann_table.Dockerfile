@@ -1,25 +1,40 @@
 # ann_table -- runtime dependencies for SNP matrix table generation
-# Post-processing scripts are provided by Nextflow from the pipeline bin/ directory.
+# SnpEff database files are provided by Nextflow from params.snpeff_data_dir.
 
-FROM python:3.12-slim
+FROM mambaorg/micromamba:2.0.5
 
 LABEL maintainer="TB-Lite pipeline"
+
+USER root
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    SNPEFF_HOME=/opt/snpEff
-
-COPY snpEff_latest_core/snpEff /opt/snpEff
+    MAMBA_ROOT_PREFIX=/opt/conda \
+    PATH=/opt/conda/bin:$PATH
 
 RUN set -e \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-       default-jre-headless \
-       bcftools \
        procps coreutils gawk grep sed findutils \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir pandas \
-    && printf '#!/bin/sh\nexec java -jar /opt/snpEff/SnpSift.jar "$@"\n' > /usr/local/bin/snpSift \
-    && chmod +x /usr/local/bin/snpSift
+       default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN micromamba install -y -n base -c conda-forge -c bioconda \
+       python=3.12 \
+       pandas \
+       bcftools \
+       snpsift \
+    && micromamba clean --all --yes
+
+RUN printf '%s\n' \
+       '#!/bin/sh' \
+       'JAR=$(find /opt/conda -name SnpSift.jar -print -quit)' \
+       '[ -n "$JAR" ] || { echo "SnpSift.jar not found under /opt/conda" >&2; exit 127; }' \
+       'exec java -jar "$JAR" "$@"' \
+    > /usr/local/bin/snpSift \
+    && chmod +x /usr/local/bin/snpSift \
+    && ln -s /usr/local/bin/snpSift /usr/local/bin/SnpSift
+
+USER $MAMBA_USER

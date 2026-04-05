@@ -5,7 +5,8 @@
 batches.log
 res*
 work
-data
+/data
+/snpEff_latest_core/
 *.sif
 uv.lock
 pyproject.toml

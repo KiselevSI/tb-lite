@@ -64,6 +64,7 @@ workflow REPORTS {
 
             final_table = FINAL_TABLE(
                 wgs_metrics.collect(),
+                fastp_reports.collect(),
                 bcftools_stats.collect(),
                 samtools_flagstat.collect(),
                 tbmix.collect(),

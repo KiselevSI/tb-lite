@@ -50,7 +50,6 @@ tb-lite/
 │   ├── ismap/is6110.fasta     # Последовательность IS6110
 │   ├── chr_name/chr.txt       # Маппинг имён хромосом
 │   ├── tbmix/levels.tsv       # Уровни для детекции смешанных инфекций
-│   ├── vcf2table/feature_table.tsv
 │   ├── multiqc/multiqc_config.yaml
 │   └── SNPEFF_ANNOTATION/h37rv_feature_table.txt
 │
@@ -222,7 +221,6 @@ run.csv
 Метрики каждого образца собираются в единый канал через `join()`. Затем фильтр отсеивает образцы по **медианному покрытию** (единственный активный фильтр):
 
 - Медианное покрытие >= 30X (`min_median`) — **активный фильтр**
-- Среднее покрытие >= 10X (`min_mean_cov`) — параметр определён, но сейчас не участвует в отборе
 - % выравненных > 90% (`min_align_pct`) — **активный фильтр**
 
 Образцы, не прошедшие фильтр → `bad_reads_low_coverage.txt` (с указанием причины). Прошедшие образцы передаются как `bam_good` и `trimmed_good` в последующие этапы
@@ -354,7 +352,7 @@ params {
     sra_ids            = null                         // Альтернативный вход: список SRA ID
     outdir             = "./results"                 // Директория результатов
     reference          = "assets/h37rv.fa"           // Референсный геном
-    snpeff_data_dir    = "snpEff_latest_core/snpEff/data" // Каталог данных SnpEff
+    snpeff_data_dir    = "assets/SNPEFF_ANNOTATION/data" // Каталог данных SnpEff
     kraken2_db         = null                        // Первая база Kraken2
     kraken2_db_label   = null                        // Необязательная метка для первой базы
     kraken2_db_2       = null                        // Необязательная вторая база Kraken2
@@ -366,7 +364,6 @@ params {
 
     // Пороги фильтрации
     min_median         = 30
-    min_mean_cov       = 10
     min_align_pct      = 90
 }
 ```

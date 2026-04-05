@@ -39,7 +39,7 @@ class WorkflowMain {
             Options:
               --outdir              Output directory [default: ./results]
               --reference           Reference genome FASTA [default: assets/h37rv.fa]
-              --snpeff_data_dir     Path to SnpEff data directory [default: snpEff_latest_core/snpEff/data]
+              --snpeff_data_dir     Path to SnpEff data directory [default: assets/SNPEFF_ANNOTATION/data]
               --kraken2_db          Path to first Kraken2 database
               --kraken2_db_label    Optional label for first Kraken2 database
               --kraken2_db_2        Optional path to second Kraken2 database

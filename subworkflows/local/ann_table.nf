@@ -30,10 +30,12 @@ process FILTER_ANN_TABLE_INPUT {
 workflow ANN_TABLE {
     take:
         vcfs
+        ref_fai
 
     main:
-        ref_meta = [id: file(params.reference).baseName]
-        ref = Channel.value([ref_meta, file(params.reference), file("${params.reference}.fai", checkIfExists: true)])
+        ref = ref_fai.map { meta, fai ->
+            [meta, file(params.reference), fai]
+        }
         snpeff_cache = Channel.value([[id: 'snpeff_cache'], file(params.snpeff_data_dir, checkIfExists: true)])
 
         FILTER_ANN_TABLE_INPUT(vcfs)
