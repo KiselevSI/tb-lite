@@ -114,7 +114,7 @@ workflow FILTER {
 
         good_samples = combined_metrics
             .filter { id, pct, cov, median ->
-                pct > params.min_align_pct && median >= params.min_median
+                pct >= params.min_align_pct && median >= params.min_median
             }
             .map { id, pct, cov, median -> id }
 
