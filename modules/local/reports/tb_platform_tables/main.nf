@@ -30,24 +30,44 @@ process TB_PLATFORM_TABLES {
 
     script:
     """
-    python ${projectDir}/bin/build_metrics_table.py --wgs $wgs_metrics --bcftools $bcftools_stats --flagstat $samtools_flagstat -o general.tsv --round
+    write_list() {
+        local output_file="\$1"
+        shift
+        : > "\$output_file"
+        for input_path in "\$@"; do
+            [[ -n "\$input_path" ]] && printf '%s\\n' "\$input_path" >> "\$output_file"
+        done
+        if [[ -s "\$output_file" ]]; then
+            LC_ALL=C sort -u "\$output_file" -o "\$output_file"
+        fi
+    }
 
-    awk -F '\\t' '(NR==1) || (FNR>1)' $tbmix  > tbmix.total.tsv
+    write_list wgs_metrics.list $wgs_metrics
+    write_list bcftools_stats.list $bcftools_stats
+    write_list samtools_flagstat.list $samtools_flagstat
+    write_list tbmix.list $tbmix
+    write_list spotyping.list $spotyping
+    write_list tblg_table.list $tblg_table
+    write_list drugs.list $drugs
+    write_list rd.list $rd
 
+    python ${projectDir}/bin/build_metrics_table.py \\
+        --wgs-list wgs_metrics.list \\
+        --bcftools-list bcftools_stats.list \\
+        --flagstat-list samtools_flagstat.list \\
+        -o general.tsv \\
+        --round
 
-    echo -e "Sample\\tSpolBin\\tSpol8" > spotyping.total.tsv
-
-    cat $spotyping  >> spotyping.total.tsv
-
-    awk -F '\\t' '(NR==1) || (FNR>1)' $tblg_table  > tblg.total.tsv
+    python ${projectDir}/bin/concat_tables.py --input-list tbmix.list --keep-header -o tbmix.total.tsv
+    python ${projectDir}/bin/concat_tables.py --input-list spotyping.list --prepend-line "Sample\tSpolBin\tSpol8" -o spotyping.total.tsv
+    python ${projectDir}/bin/concat_tables.py --input-list tblg_table.list --keep-header -o tblg.total.tsv
 
     python ${projectDir}/bin/filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
-    python ${projectDir}/bin/profiler_parser.py -i $drugs -g $gbk --flat-header -o drug_resist.xlsx
+    python ${projectDir}/bin/profiler_parser.py --input-list drugs.list -g $gbk --flat-header -o drug_resist.xlsx
 
-    python ${projectDir}/bin/profiler_parser.py -i $drugs -g $gbk --flat-header --include-other-uncertain -o drug_resist_and_uncertain.xlsx
+    python ${projectDir}/bin/profiler_parser.py --input-list drugs.list -g $gbk --flat-header --include-other-uncertain -o drug_resist_and_uncertain.xlsx
 
-    python ${projectDir}/bin/deletions_to_csv.py -i $rd -o rd.tsv
-
+    python ${projectDir}/bin/deletions_to_csv.py --input-list rd.list -o rd.tsv
     """
 }

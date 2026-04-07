@@ -48,8 +48,11 @@ def parse_args():
         description="Собрать таблицу основных QC/variant метрик без зависимости от MultiQC."
     )
     parser.add_argument("--wgs", nargs="*", default=[], help="Picard WGS metrics files")
+    parser.add_argument("--wgs-list", help="Text file with one Picard WGS metrics path per line")
     parser.add_argument("--bcftools", nargs="*", default=[], help="bcftools stats files")
+    parser.add_argument("--bcftools-list", help="Text file with one bcftools stats path per line")
     parser.add_argument("--flagstat", nargs="*", default=[], help="samtools flagstat files")
+    parser.add_argument("--flagstat-list", help="Text file with one samtools flagstat path per line")
     parser.add_argument("-o", "--out", default="general.tsv", help="Output TSV path")
     parser.add_argument(
         "--round",
@@ -57,6 +60,34 @@ def parse_args():
         help="Round numeric columns to 2 decimals",
     )
     return parser.parse_args()
+
+
+def read_input_list(path: str | None) -> list[str]:
+    if not path:
+        return []
+
+    items: list[str] = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            items.append(line)
+
+    return items
+
+
+def merge_inputs(cli_items: list[str], list_path: str | None) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for item in [*(cli_items or []), *read_input_list(list_path)]:
+        if item in seen:
+            continue
+        seen.add(item)
+        merged.append(item)
+
+    return merged
 
 
 def parse_picard(path: Path) -> dict:
@@ -129,17 +160,17 @@ def main():
 
     rows: dict[str, dict] = {}
 
-    for entry in args.wgs:
+    for entry in merge_inputs(args.wgs, args.wgs_list):
         parsed = parse_picard(Path(entry))
         if parsed:
             rows.setdefault(parsed["ID"], {}).update(parsed)
 
-    for entry in args.bcftools:
+    for entry in merge_inputs(args.bcftools, args.bcftools_list):
         parsed = parse_bcftools(Path(entry))
         if parsed:
             rows.setdefault(parsed["ID"], {}).update(parsed)
 
-    for entry in args.flagstat:
+    for entry in merge_inputs(args.flagstat, args.flagstat_list):
         parsed = parse_flagstat(Path(entry))
         if parsed:
             rows.setdefault(parsed["ID"], {}).update(parsed)

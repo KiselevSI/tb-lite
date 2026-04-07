@@ -41,9 +41,13 @@ def parse_args():
     parser.add_argument(
         "-i",
         "--input",
-        nargs="+",
-        required=True,
+        nargs="*",
+        default=[],
         help="Файлы и/или директории. Директории обходятся рекурсивно.",
+    )
+    parser.add_argument(
+        "--input-list",
+        help="Текстовый файл со списком входов: один путь к файлу/директории на строку.",
     )
     parser.add_argument(
         "-o",
@@ -67,6 +71,34 @@ def parse_args():
         help="Печатать только итоговую сводку в конце (stderr).",
     )
     return parser.parse_args()
+
+
+def read_input_list(path: str | None) -> list[str]:
+    if not path:
+        return []
+
+    items: list[str] = []
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            items.append(line)
+
+    return items
+
+
+def merge_inputs(cli_items, list_path: str | None):
+    merged = []
+    seen = set()
+
+    for item in [*(cli_items or []), *read_input_list(list_path)]:
+        if item in seen:
+            continue
+        seen.add(item)
+        merged.append(item)
+
+    return merged
 
 
 def log(msg: str, quiet: bool, stream=None):
@@ -168,6 +200,10 @@ def iter_deletions_from_file(filepath: Path, quiet: bool):
 
 def main():
     args = parse_args()
+    inputs = merge_inputs(args.input, args.input_list)
+
+    if not inputs:
+        raise SystemExit("Нужно указать --input и/или --input-list")
 
     total_files = 0
     total_rows = 0
@@ -176,7 +212,7 @@ def main():
         writer = csv.DictWriter(out_f, fieldnames=OUT_COLS)
         writer.writeheader()
 
-        for fp in iter_input_files(args.input, args.pattern, args.quiet):
+        for fp in iter_input_files(inputs, args.pattern, args.quiet):
             if not fp.exists() or not fp.is_file():
                 continue
 

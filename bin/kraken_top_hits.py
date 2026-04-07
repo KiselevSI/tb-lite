@@ -16,9 +16,13 @@ def parse_args():
     parser.add_argument(
         "-i",
         "--input",
-        nargs="+",
-        required=True,
+        nargs="*",
+        default=[],
         help="Kraken combined *.all_samples.txt files.",
+    )
+    parser.add_argument(
+        "--input-list",
+        help="Text file with one Kraken combined path per line.",
     )
     parser.add_argument(
         "-o",
@@ -32,7 +36,42 @@ def parse_args():
         default=5,
         help="Number of top organisms per database to include.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if not args.input and not args.input_list:
+        parser.error("provide --input and/or --input-list")
+
+    return args
+
+
+def read_input_list(path: str | None) -> list[str]:
+    if not path:
+        return []
+
+    items: list[str] = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            items.append(line)
+
+    return items
+
+
+def merge_inputs(cli_items: list[str], list_path: str | None) -> list[Path]:
+    merged: list[Path] = []
+    seen: set[str] = set()
+
+    for item in [*(cli_items or []), *read_input_list(list_path)]:
+        path = Path(item)
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(path)
+
+    return sorted(merged)
 
 
 def sanitize_label(value: str) -> str:
@@ -105,7 +144,7 @@ def top_hits_for_file(path: Path, top_n: int) -> tuple[list[str], dict[str, list
 def main():
     args = parse_args()
 
-    inputs = sorted(Path(item) for item in args.input)
+    inputs = merge_inputs(args.input, args.input_list)
     sample_rows: dict[str, dict[str, str]] = {}
     ordered_columns: list[str] = []
 
