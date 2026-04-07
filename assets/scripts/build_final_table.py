@@ -284,10 +284,18 @@ def dr_to_flat_with_maps(path: Union[str, Path]) -> tuple[pd.DataFrame, Dict[str
 # ----------------- Таблицы CSV/TSV -----------------
 def read_table(path: Path, str_cols: list[str]) -> pd.DataFrame:
     dtypes = {c: "string" for c in str_cols if c != "ID"}
+    suffix = path.suffix.lower()
+    if suffix == ".tsv":
+        sep = "\t"
+    elif suffix == ".csv":
+        sep = ","
+    else:
+        sep = None
+
     df = pd.read_csv(
         path,
-        sep=None,            # autodetect
-        engine="python",     # требуется при sep=None
+        sep=sep,
+        engine="python",
         dtype=dtypes,
         keep_default_na=False,
     )
@@ -301,21 +309,21 @@ def read_table(path: Path, str_cols: list[str]) -> pd.DataFrame:
 def merge_tables(dfs: list[pd.DataFrame], how: str = "outer") -> pd.DataFrame:
     """
     Объединяем список DataFrame по ID.
-    Переводим в индекс и последовательно конкатенируем столбцы:
-    pd.concat([base, r], axis=1, join=how).
+    Используем последовательные pd.merge(..., on="ID", how=how),
+    потому что pd.concat(axis=1) поддерживает только inner/outer.
 
     Для одноуровневых пересечений имён добавляем *_x / *_y.
     """
     if not dfs:
         return pd.DataFrame(columns=["ID"])
 
-    frames = [df.set_index("ID") for df in dfs]
-    base = frames[0].copy()
+    base = dfs[0].copy()
     suffixed_once: set[str] = set()
 
-    for r in frames[1:]:
-        base_one = {c for c in base.columns if not isinstance(c, tuple)}
-        r_one = {c for c in r.columns if not isinstance(c, tuple)}
+    for r in dfs[1:]:
+        r = r.copy()
+        base_one = {c for c in base.columns if c != "ID" and not isinstance(c, tuple)}
+        r_one = {c for c in r.columns if c != "ID" and not isinstance(c, tuple)}
         overlap = sorted(base_one.intersection(r_one))
 
         if overlap:
@@ -346,9 +354,9 @@ def merge_tables(dfs: list[pd.DataFrame], how: str = "outer") -> pd.DataFrame:
             if rename_r:
                 r = r.rename(columns=rename_r)
 
-        base = pd.concat([base, r], axis=1, join=how)
+        base = pd.merge(base, r, on="ID", how=how)
 
-    return base.reset_index()
+    return base
 
 
 # ----------------- main -----------------
