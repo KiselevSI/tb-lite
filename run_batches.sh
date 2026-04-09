@@ -217,6 +217,7 @@ mkdir -p "${OUTDIR}/batch_reports/filter"
 rm -f "${BATCH_DIR}"/batch_*.csv "${BATCH_DIR}"/batch_*.txt
 if (( RESUME_FROM == 1 )); then
     rm -f "${OUTDIR}/batch_reports/filter"/bad_reads_low_coverage.batch_*.txt
+    rm -f "${OUTDIR}/batch_reports/filter"/unsupported_sra_layout.batch_*.txt
 fi
 
 merge_bad_reads() {
@@ -232,6 +233,21 @@ merge_bad_reads() {
 
     awk 'FNR == 1 && ++seen > 1 { next } { print }' "${files[@]}" > "$output_file"
     echo "  Сводный bad_reads сохранён в ${output_file}"
+}
+
+merge_unsupported_layouts() {
+    local output_dir="${OUTDIR}/Reports/general"
+    local output_file="${output_dir}/unsupported_sra_layout.txt"
+    local files=( "${OUTDIR}/batch_reports/filter"/unsupported_sra_layout.batch_*.txt )
+
+    mkdir -p "$output_dir"
+
+    if [[ ! -e "${files[0]}" ]]; then
+        return 0
+    fi
+
+    awk 'FNR == 1 && ++seen > 1 { next } { print }' "${files[@]}" > "$output_file"
+    echo "  Сводный unsupported_sra_layout сохранён в ${output_file}"
 }
 
 run_final_reports() {
@@ -369,6 +385,7 @@ for (( i = RESUME_FROM; i <= TOTAL_BATCHES; i++ )); do
 done
 
 merge_bad_reads
+merge_unsupported_layouts
 run_final_reports
 
 echo ""

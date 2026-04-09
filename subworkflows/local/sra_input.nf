@@ -15,7 +15,8 @@ process SRA_DETECT_LAYOUT {
     tuple val(meta), path(sra)
 
     output:
-    tuple val(meta), path(sra), path('layout.txt'), emit: sra
+    tuple val(meta), path(sra), path('layout.txt'), optional: true, emit: supported
+    tuple val(meta), path('unsupported_layout.tsv'), optional: true, emit: unsupported
 
     script:
     """
@@ -48,8 +49,8 @@ process SRA_DETECT_LAYOUT {
     elif [[ "\$count" -eq 2 ]]; then
         echo paired > layout.txt
     else
-        echo "ERROR: ${meta.id} produced \$count FASTQ files during layout detection; expected 1 or 2." >&2
-        exit 1
+        printf 'sample_id\\treason\\tfastq_count\\n%s\\tunsupported_layout\\t%s\\n' "${meta.id}" "\$count" > unsupported_layout.tsv
+        echo "WARN: ${meta.id} produced \$count FASTQ files during layout detection; skipping accession." >&2
     fi
     """
 }
@@ -82,7 +83,29 @@ workflow SRA_INPUT {
     SRATOOLS_PREFETCH(accessions, ncbi_settings, certificate)
     SRA_DETECT_LAYOUT(SRATOOLS_PREFETCH.out.sra)
 
-    fasterq_input = SRA_DETECT_LAYOUT.out.map { meta, sra, layout ->
+    unsupported_name = params.batch_tag
+        ? "unsupported_sra_layout.${params.batch_tag}.txt"
+        : 'unsupported_sra_layout.txt'
+    unsupported_dir = params.batch_tag
+        ? "${params.outdir}/batch_reports/filter"
+        : "${params.outdir}/Reports/general"
+
+    unsupported_header = Channel.value("sample_id\treason\tfastq_count")
+    unsupported_rows = SRA_DETECT_LAYOUT.out.unsupported
+        .flatMap { meta, report ->
+            report.text.readLines().drop(1).findAll { it }
+        }
+
+    unsupported_header
+        .mix(unsupported_rows)
+        .collectFile(
+            name: unsupported_name,
+            storeDir: unsupported_dir,
+            newLine: true,
+            sort: false
+        )
+
+    fasterq_input = SRA_DETECT_LAYOUT.out.supported.map { meta, sra, layout ->
         def singleEnd = layout.text.trim() == 'single'
         [meta + [single_end: singleEnd], sra]
     }
