@@ -175,9 +175,14 @@ def pad(fracs: List[float], lineage: str, level: int) -> str:
     return ":".join([f"{x:.2f}" for x in fracs] + [""] * max(0, need - len(fracs)))
 
 def make_cols(grp: pd.DataFrame) -> List[str]:
-    grp = grp.assign(
-        pretty=lambda g: g.apply(
-            lambda r: f"{r.lineage}({pad(r.fractions, r.lineage, r.level)})", axis=1))
+    if grp.empty:
+        return [""] * 5
+
+    grp = grp.copy()
+    grp["pretty"] = [
+        f"{r.lineage}({pad(r.fractions, r.lineage, r.level)})"
+        for r in grp.itertuples(index=False)
+    ]
     return [";".join(grp.loc[grp.level == lvl, "pretty"]) for lvl in range(1, 6)]
 
 # ───────────────────────────────────── CLI ────────────────────────────────────
