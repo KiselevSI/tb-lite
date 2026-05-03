@@ -50,7 +50,7 @@ usage() {
 
 Особенности batch-режима:
   - каждый батч запускается с --skip_final_reports --skip_multiqc --skip_snp_matrix
-  - после последнего батча автоматически собираются один общий Reports/ и один общий multiqc/
+  - после последнего батча автоматически собирается один общий Reports/
 EOF
     exit 0
 }
@@ -176,15 +176,119 @@ else
     NF_INPUT_FLAG="--sra_ids"
 fi
 
+mkdir -p "$BATCH_DIR"
+mkdir -p "$OUTDIR"
+mkdir -p "$WORKDIR"
+mkdir -p "${OUTDIR}/batch_reports/filter"
+
+count_existing_batches() {
+    local max_batch=0
+    local batch_file
+    local batch_name
+    local batch_num
+
+    shopt -s nullglob
+    for batch_file in "${BATCH_DIR}"/batch_*.${BATCH_EXT}; do
+        batch_name="${batch_file##*/}"
+        batch_num="${batch_name#batch_}"
+        batch_num="${batch_num%.${BATCH_EXT}}"
+        if [[ "$batch_num" =~ ^[0-9]+$ ]] && (( batch_num > max_batch )); then
+            max_batch="$batch_num"
+        fi
+    done
+    shopt -u nullglob
+
+    echo "$max_batch"
+}
+
+count_samples_in_batch_file() {
+    local batch_file="$1"
+    if [[ "$INPUT_MODE" == "fastq" ]]; then
+        local lines
+        lines=$(wc -l < "$batch_file")
+        echo $(( lines > 0 ? lines - 1 : 0 ))
+    else
+        wc -l < "$batch_file"
+    fi
+}
+
+count_samples_in_existing_batches() {
+    local total=0
+    local i
+    local batch_file
+
+    for (( i = 1; i <= TOTAL_BATCHES; i++ )); do
+        batch_file="${BATCH_DIR}/batch_${i}.${BATCH_EXT}"
+        if [[ ! -f "$batch_file" ]]; then
+            echo "Ошибка: существующая разбивка неполная — нет ${batch_file}" >&2
+            exit 1
+        fi
+        total=$(( total + $(count_samples_in_batch_file "$batch_file") ))
+    done
+
+    echo "$total"
+}
+
+create_batches_from_input() {
+    echo "Создаю новую разбивку входного файла на батчи..."
+
+    local header=""
+    local batch_num=0
+    local line_num=0
+    local batch_file
+
+    if [[ "$INPUT_MODE" == "fastq" ]]; then
+        header=$(head -1 "$INPUT")
+        tail -n +2 "$INPUT" | grep '[^[:space:]]' | while IFS= read -r line; do
+            if (( line_num % BATCH_SIZE == 0 )); then
+                batch_num=$(( line_num / BATCH_SIZE + 1 ))
+                batch_file="${BATCH_DIR}/batch_${batch_num}.${BATCH_EXT}"
+                echo "$header" > "$batch_file"
+            fi
+            batch_file="${BATCH_DIR}/batch_$(( line_num / BATCH_SIZE + 1 )).${BATCH_EXT}"
+            echo "$line" >> "$batch_file"
+            line_num=$(( line_num + 1 ))
+        done
+    else
+        grep '[^[:space:]]' "$INPUT" | while IFS= read -r line; do
+            if (( line_num % BATCH_SIZE == 0 )); then
+                batch_num=$(( line_num / BATCH_SIZE + 1 ))
+                batch_file="${BATCH_DIR}/batch_${batch_num}.${BATCH_EXT}"
+                : > "$batch_file"
+            fi
+            batch_file="${BATCH_DIR}/batch_$(( line_num / BATCH_SIZE + 1 )).${BATCH_EXT}"
+            echo "$line" >> "$batch_file"
+            line_num=$(( line_num + 1 ))
+        done
+    fi
+}
+
 # --- Подготовка ---
-HEADER=""
-if [[ "$INPUT_MODE" == "fastq" ]]; then
-    HEADER=$(head -1 "$INPUT")
-    TOTAL_SAMPLES=$(tail -n +2 "$INPUT" | grep -c '[^[:space:]]' || true)
+TOTAL_BATCHES="$(count_existing_batches)"
+if (( TOTAL_BATCHES > 0 )); then
+    TOTAL_SAMPLES="$(count_samples_in_existing_batches)"
+    echo "Использую существующую разбивку: $TOTAL_BATCHES батчей в $BATCH_DIR/"
 else
-    TOTAL_SAMPLES=$(grep -c '[^[:space:]]' "$INPUT" || true)
+    if [[ "$INPUT_MODE" == "fastq" ]]; then
+        TOTAL_SAMPLES=$(tail -n +2 "$INPUT" | grep -c '[^[:space:]]' || true)
+    else
+        TOTAL_SAMPLES=$(grep -c '[^[:space:]]' "$INPUT" || true)
+    fi
+    TOTAL_BATCHES=$(( (TOTAL_SAMPLES + BATCH_SIZE - 1) / BATCH_SIZE ))
+    create_batches_from_input
+    TOTAL_BATCHES="$(count_existing_batches)"
+    echo "Создано $TOTAL_BATCHES батчей в $BATCH_DIR/"
 fi
-TOTAL_BATCHES=$(( (TOTAL_SAMPLES + BATCH_SIZE - 1) / BATCH_SIZE ))
+
+if (( RESUME_FROM < 1 || RESUME_FROM > TOTAL_BATCHES )); then
+    echo "Ошибка: --resume-from должен быть в диапазоне 1..${TOTAL_BATCHES}"
+    exit 1
+fi
+
+if [[ ! -f "${BATCH_DIR}/batch_${RESUME_FROM}.${BATCH_EXT}" ]]; then
+    echo "Ошибка: не найден ${BATCH_DIR}/batch_${RESUME_FROM}.${BATCH_EXT}"
+    exit 1
+fi
 
 echo "============================================"
 echo "TB-Lite батчевый запуск"
@@ -209,16 +313,6 @@ else
     echo "Kraken:        disabled"
 fi
 echo "============================================"
-
-mkdir -p "$BATCH_DIR"
-mkdir -p "$OUTDIR"
-mkdir -p "$WORKDIR"
-mkdir -p "${OUTDIR}/batch_reports/filter"
-rm -f "${BATCH_DIR}"/batch_*.csv "${BATCH_DIR}"/batch_*.txt
-if (( RESUME_FROM == 1 )); then
-    rm -f "${OUTDIR}/batch_reports/filter"/bad_reads_low_coverage.batch_*.txt
-    rm -f "${OUTDIR}/batch_reports/filter"/unsupported_sra_layout.batch_*.txt
-fi
 
 merge_bad_reads() {
     local output_dir="${OUTDIR}/Reports/general"
@@ -255,6 +349,7 @@ run_final_reports() {
     local nf_cmd=(
         nextflow run "${PIPELINE_DIR}/batch_reports.nf"
         --outdir "$OUTDIR"
+        --skip_multiqc
         -w "$reports_workdir"
         -resume
     )
@@ -273,41 +368,9 @@ run_final_reports() {
     fi
 
     echo ""
-    echo "Собираю общий Reports/ и multiqc/..."
+    echo "Собираю общий Reports/..."
     "${nf_cmd[@]}"
 }
-
-# --- Разбиение входа на батчи ---
-echo "Разбиваю входной файл на батчи..."
-
-BATCH_NUM=0
-LINE_NUM=0
-
-if [[ "$INPUT_MODE" == "fastq" ]]; then
-    tail -n +2 "$INPUT" | grep '[^[:space:]]' | while IFS= read -r line; do
-        if (( LINE_NUM % BATCH_SIZE == 0 )); then
-            BATCH_NUM=$(( LINE_NUM / BATCH_SIZE + 1 ))
-            BATCH_FILE="${BATCH_DIR}/batch_${BATCH_NUM}.${BATCH_EXT}"
-            echo "$HEADER" > "$BATCH_FILE"
-        fi
-        BATCH_FILE="${BATCH_DIR}/batch_$(( LINE_NUM / BATCH_SIZE + 1 )).${BATCH_EXT}"
-        echo "$line" >> "$BATCH_FILE"
-        LINE_NUM=$(( LINE_NUM + 1 ))
-    done
-else
-    grep '[^[:space:]]' "$INPUT" | while IFS= read -r line; do
-        if (( LINE_NUM % BATCH_SIZE == 0 )); then
-            BATCH_NUM=$(( LINE_NUM / BATCH_SIZE + 1 ))
-            BATCH_FILE="${BATCH_DIR}/batch_${BATCH_NUM}.${BATCH_EXT}"
-            : > "$BATCH_FILE"
-        fi
-        BATCH_FILE="${BATCH_DIR}/batch_$(( LINE_NUM / BATCH_SIZE + 1 )).${BATCH_EXT}"
-        echo "$line" >> "$BATCH_FILE"
-        LINE_NUM=$(( LINE_NUM + 1 ))
-    done
-fi
-
-echo "Создано $TOTAL_BATCHES батчей в $BATCH_DIR/"
 
 # --- Запуск батчей ---
 for (( i = RESUME_FROM; i <= TOTAL_BATCHES; i++ )); do
@@ -393,6 +456,5 @@ echo "============================================"
 echo "Все $TOTAL_BATCHES батчей завершены!"
 echo "Результаты в: $OUTDIR"
 echo "Итоговые отчёты: ${OUTDIR}/Reports"
-echo "Итоговый MultiQC: ${OUTDIR}/multiqc"
 echo "Лог: $LOG_FILE"
 echo "============================================"
