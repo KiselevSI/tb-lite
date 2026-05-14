@@ -329,6 +329,21 @@ merge_bad_reads() {
     echo "  Сводный bad_reads сохранён в ${output_file}"
 }
 
+merge_invalid_fastqs() {
+    local output_dir="${OUTDIR}/Reports/general"
+    local output_file="${output_dir}/bad_reads_invalid_fastq.txt"
+    local files=( "${OUTDIR}/batch_reports/filter"/bad_reads_invalid_fastq.batch_*.txt )
+
+    mkdir -p "$output_dir"
+
+    if [[ ! -e "${files[0]}" ]]; then
+        return 0
+    fi
+
+    awk 'FNR == 1 && ++seen > 1 { next } { print }' "${files[@]}" > "$output_file"
+    echo "  Сводный bad_reads_invalid_fastq сохранён в ${output_file}"
+}
+
 merge_unsupported_layouts() {
     local output_dir="${OUTDIR}/Reports/general"
     local output_file="${output_dir}/unsupported_sra_layout.txt"
@@ -448,6 +463,7 @@ for (( i = RESUME_FROM; i <= TOTAL_BATCHES; i++ )); do
 done
 
 merge_bad_reads
+merge_invalid_fastqs
 merge_unsupported_layouts
 run_final_reports
 

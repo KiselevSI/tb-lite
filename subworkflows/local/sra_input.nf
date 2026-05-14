@@ -27,8 +27,9 @@ process SRA_DETECT_LAYOUT {
     fi
 
     if [[ -z "\$sra_file" ]]; then
-        echo "ERROR: prefetched SRA file for ${meta.id} not found under ${sra}" >&2
-        exit 1
+        printf 'sample_id\\treason\\tfastq_count\\n%s\\tsra_file_not_found\\t0\\n' "${meta.id}" > unsupported_layout.tsv
+        echo "WARN: prefetched SRA file for ${meta.id} not found under ${sra}; skipping accession." >&2
+        exit 0
     fi
 
     mkdir -p preview
