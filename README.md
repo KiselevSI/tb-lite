@@ -256,6 +256,8 @@ python make_snp_matrix_csv.py \
   --sample-source filename
 ```
 
+Для `--sample-source filename` параметр `--jobs` не ускоряет работу: VCF не открываются, скрипт только сканирует пути и берет sample ID из имени файла. Прогресс поиска и обработки печатается в stderr.
+
 Если нужен именно sample ID из header, включите параллельное чтение:
 
 ```bash

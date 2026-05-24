@@ -55,7 +55,14 @@ def sanitize_sample_id(sample: str) -> str:
 
 def find_vcfs(in_dir: Path, recursive: bool) -> list[Path]:
     iterator = in_dir.rglob('*') if recursive else in_dir.glob('*')
-    return sorted(path.resolve() for path in iterator if path.is_file() and is_vcf(path))
+    files = []
+    for path in iterator:
+        if path.is_file() and is_vcf(path):
+            files.append(path.resolve())
+            if len(files) % PROGRESS_INTERVAL == 0:
+                print(f"Scanning {in_dir}: found {len(files)} VCF files", file=sys.stderr)
+    print(f"Scanning {in_dir}: found {len(files)} VCF files", file=sys.stderr)
+    return sorted(files)
 
 
 def report_progress(done: int, total: int) -> None:
@@ -159,7 +166,7 @@ def main() -> None:
         '--jobs',
         type=int,
         default=1,
-        help='Number of parallel workers for --sample-source header. Use --sample-source filename for fastest mode. Default: 1',
+        help='Number of parallel workers for --sample-source header. Ignored by --sample-source filename. Default: 1',
     )
     args = ap.parse_args()
 
