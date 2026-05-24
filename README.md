@@ -239,6 +239,14 @@ CSV можно создать из директории с VCF:
 python make_snp_matrix_csv.py -i /data/vcf -o vcf_samples.csv
 ```
 
+Можно передать несколько директорий:
+
+```bash
+python make_snp_matrix_csv.py \
+  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
+  -o vcf_samples.csv
+```
+
 ## Выходные данные
 
 ### Итоговые отчёты

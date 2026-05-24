@@ -55,10 +55,16 @@ def find_vcfs(in_dir: Path, recursive: bool) -> list[Path]:
     return sorted(path.resolve() for path in iterator if path.is_file() and is_vcf(path))
 
 
-def build_rows(in_dir: Path, recursive: bool, sanitize: bool, sample_source: str) -> list[list[str]]:
-    files = find_vcfs(in_dir, recursive)
+def build_rows(in_dirs: list[Path], recursive: bool, sanitize: bool, sample_source: str) -> list[list[str]]:
+    files = []
+    for in_dir in in_dirs:
+        dir_files = find_vcfs(in_dir, recursive)
+        if not dir_files:
+            raise SystemExit(f"ERROR: VCF files (*.vcf or *.vcf.gz) not found in '{in_dir}'")
+        files.extend(dir_files)
+
     if not files:
-        raise SystemExit(f"ERROR: VCF files (*.vcf or *.vcf.gz) not found in '{in_dir}'")
+        raise SystemExit("ERROR: VCF files (*.vcf or *.vcf.gz) not found in input directories")
 
     rows = []
     seen_samples = {}
@@ -90,9 +96,15 @@ def build_rows(in_dir: Path, recursive: bool, sanitize: bool, sample_source: str
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description='Create sample,vcf CSV input for snp_matrix.nf from a directory of VCF files.'
+        description='Create sample,vcf CSV input for snp_matrix.nf from one or more directories of VCF files.'
     )
-    ap.add_argument('-i', '--input', required=True, help='Input directory with *.vcf or *.vcf.gz files')
+    ap.add_argument(
+        '-i',
+        '--input',
+        nargs='+',
+        required=True,
+        help='Input directory or directories with *.vcf or *.vcf.gz files',
+    )
     ap.add_argument('-o', '--output', required=True, help='Output CSV path')
     ap.add_argument(
         '--no-recursive',
@@ -112,12 +124,13 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    in_dir = Path(args.input).resolve()
-    if not in_dir.is_dir():
-        raise SystemExit(f"ERROR: '{in_dir}' is not a directory")
+    in_dirs = [Path(path).resolve() for path in args.input]
+    for in_dir in in_dirs:
+        if not in_dir.is_dir():
+            raise SystemExit(f"ERROR: '{in_dir}' is not a directory")
 
     rows = build_rows(
-        in_dir=in_dir,
+        in_dirs=in_dirs,
         recursive=not args.no_recursive,
         sanitize=args.sanitize_sample_ids,
         sample_source=args.sample_source,
