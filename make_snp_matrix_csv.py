@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import gzip
 import re
+import sys
 from pathlib import Path
 
 VCF_EXTS = ('.vcf', '.vcf.gz')
 VALID_SAMPLE_RE = re.compile(r'^[A-Za-z0-9._-]+$')
+PROGRESS_INTERVAL = 1000
 
 
 def is_vcf(path: Path) -> bool:
@@ -37,11 +40,11 @@ def read_vcf_sample_id(path: Path) -> str:
                 fields = line.rstrip('\n').split('\t')
                 samples = fields[9:]
                 if len(samples) != 1:
-                    raise SystemExit(
+                    raise ValueError(
                         f"ERROR: '{path}' must contain exactly one sample column, found {len(samples)}"
                     )
                 return samples[0]
-    raise SystemExit(f"ERROR: VCF header line '#CHROM' not found in '{path}'")
+    raise ValueError(f"ERROR: VCF header line '#CHROM' not found in '{path}'")
 
 
 def sanitize_sample_id(sample: str) -> str:
@@ -55,7 +58,42 @@ def find_vcfs(in_dir: Path, recursive: bool) -> list[Path]:
     return sorted(path.resolve() for path in iterator if path.is_file() and is_vcf(path))
 
 
-def build_rows(in_dirs: list[Path], recursive: bool, sanitize: bool, sample_source: str) -> list[list[str]]:
+def report_progress(done: int, total: int) -> None:
+    if done == total or done % PROGRESS_INTERVAL == 0:
+        print(f"Processed {done}/{total} VCF files", file=sys.stderr)
+
+
+def build_row(vcf: Path, sanitize: bool, sample_source: str) -> list[str]:
+    sample = read_vcf_sample_id(vcf) if sample_source == 'header' else sample_id_from_vcf(vcf)
+    if sanitize:
+        sample = sanitize_sample_id(sample)
+
+    if not sample:
+        raise ValueError(f"ERROR: cannot derive sample ID from '{vcf}'")
+    if not VALID_SAMPLE_RE.fullmatch(sample):
+        raise ValueError(
+            f"ERROR: sample ID '{sample}' from '{vcf.name}' contains unsupported characters. "
+            "Rename the file or rerun with --sanitize-sample-ids."
+        )
+    return [sample, str(vcf)]
+
+
+def validate_unique_samples(rows: list[list[str]]) -> list[list[str]]:
+    rows.sort(key=lambda row: (row[0], row[1]))
+    seen_samples = {}
+
+    for sample, vcf in rows:
+        if sample in seen_samples:
+            raise SystemExit(
+                f"ERROR: duplicate sample ID '{sample}' derived from both "
+                f"'{seen_samples[sample]}' and '{vcf}'"
+            )
+        seen_samples[sample] = vcf
+
+    return rows
+
+
+def build_rows(in_dirs: list[Path], recursive: bool, sanitize: bool, sample_source: str, jobs: int) -> list[list[str]]:
     files = []
     for in_dir in in_dirs:
         dir_files = find_vcfs(in_dir, recursive)
@@ -66,32 +104,27 @@ def build_rows(in_dirs: list[Path], recursive: bool, sanitize: bool, sample_sour
     if not files:
         raise SystemExit("ERROR: VCF files (*.vcf or *.vcf.gz) not found in input directories")
 
+    print(f"Found {len(files)} VCF files", file=sys.stderr)
     rows = []
-    seen_samples = {}
 
-    for vcf in files:
-        sample = read_vcf_sample_id(vcf) if sample_source == 'header' else sample_id_from_vcf(vcf)
-        if sanitize:
-            sample = sanitize_sample_id(sample)
+    if sample_source == 'header' and jobs > 1:
+        with ThreadPoolExecutor(max_workers=jobs) as executor:
+            futures = [executor.submit(build_row, vcf, sanitize, sample_source) for vcf in files]
+            for done, future in enumerate(as_completed(futures), start=1):
+                try:
+                    rows.append(future.result())
+                except ValueError as exc:
+                    raise SystemExit(str(exc)) from exc
+                report_progress(done, len(files))
+    else:
+        for done, vcf in enumerate(files, start=1):
+            try:
+                rows.append(build_row(vcf, sanitize, sample_source))
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+            report_progress(done, len(files))
 
-        if not sample:
-            raise SystemExit(f"ERROR: cannot derive sample ID from '{vcf}'")
-        if not VALID_SAMPLE_RE.fullmatch(sample):
-            raise SystemExit(
-                f"ERROR: sample ID '{sample}' from '{vcf.name}' contains unsupported characters. "
-                "Rename the file or rerun with --sanitize-sample-ids."
-            )
-        if sample in seen_samples:
-            raise SystemExit(
-                f"ERROR: duplicate sample ID '{sample}' derived from both "
-                f"'{seen_samples[sample]}' and '{vcf}'"
-            )
-
-        seen_samples[sample] = vcf
-        rows.append([sample, str(vcf)])
-
-    rows.sort(key=lambda row: row[0])
-    return rows
+    return validate_unique_samples(rows)
 
 
 def main() -> None:
@@ -122,7 +155,16 @@ def main() -> None:
         default='header',
         help='Where to get sample IDs from. Default: VCF header sample column',
     )
+    ap.add_argument(
+        '--jobs',
+        type=int,
+        default=1,
+        help='Number of parallel workers for --sample-source header. Use --sample-source filename for fastest mode. Default: 1',
+    )
     args = ap.parse_args()
+
+    if args.jobs < 1:
+        raise SystemExit("ERROR: --jobs must be a positive integer")
 
     in_dirs = [Path(path).resolve() for path in args.input]
     for in_dir in in_dirs:
@@ -134,6 +176,7 @@ def main() -> None:
         recursive=not args.no_recursive,
         sanitize=args.sanitize_sample_ids,
         sample_source=args.sample_source,
+        jobs=args.jobs,
     )
 
     out_path = Path(args.output).resolve()

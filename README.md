@@ -247,6 +247,25 @@ python make_snp_matrix_csv.py \
   -o vcf_samples.csv
 ```
 
+По умолчанию sample ID читается из VCF header. Для больших наборов это надежно, но медленно, потому что надо открыть каждый VCF. Если sample ID можно брать из имени файла, используйте быстрый режим:
+
+```bash
+python make_snp_matrix_csv.py \
+  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
+  -o vcf_samples.csv \
+  --sample-source filename
+```
+
+Если нужен именно sample ID из header, включите параллельное чтение:
+
+```bash
+python make_snp_matrix_csv.py \
+  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
+  -o vcf_samples.csv \
+  --sample-source header \
+  --jobs 16
+```
+
 ## Выходные данные
 
 ### Итоговые отчёты
