@@ -30,11 +30,15 @@ class WorkflowMain {
             Usage:
               nextflow run main.nf --input <samplesheet.csv> [options]
               nextflow run main.nf --sra_ids <ids.txt> [options]
+              nextflow run main.nf --vcf_annotation_only --vcf_list <vcf_samples.csv> [options]
 
             Required:
-              exactly one of:
+              WGS mode: exactly one of:
                 --input       CSV file with sample information (sample,fastq_1,fastq_2; FASTQ must be *.fastq.gz or *.fq.gz)
                 --sra_ids     Text file with one SRA accession per line
+              VCF annotation-only mode:
+                --vcf_annotation_only
+                --vcf_list    CSV file with columns sample,vcf
 
             Options:
               --outdir              Output directory [default: ./results]
@@ -64,9 +68,23 @@ class WorkflowMain {
             System.exit(0)
         }
 
-        if ((effectiveInput && params.sra_ids) || (!effectiveInput && !params.sra_ids)) {
-            log.error "ERROR: set exactly one of --input or --sra_ids. Use --help for usage information."
-            System.exit(1)
+        if (params.vcf_annotation_only) {
+            if (!params.vcf_list) {
+                log.error "ERROR: set --vcf_list when using --vcf_annotation_only. Use --help for usage information."
+                System.exit(1)
+            }
+            if (effectiveInput || params.sra_ids) {
+                log.error "ERROR: do not set --input, --samples, or --sra_ids with --vcf_annotation_only."
+                System.exit(1)
+            }
+        } else {
+            if ((effectiveInput && params.sra_ids) || (!effectiveInput && !params.sra_ids)) {
+                log.error "ERROR: set exactly one of --input or --sra_ids. Use --help for usage information."
+                System.exit(1)
+            }
+            if (params.vcf_list) {
+                log.warn "Parameter --vcf_list is ignored unless --vcf_annotation_only is set."
+            }
         }
 
         // Log pipeline info
@@ -76,6 +94,8 @@ class WorkflowMain {
         ======================
         input              : ${effectiveInput ?: '(none)'}
         sra_ids            : ${params.sra_ids ?: '(none)'}
+        vcf_annotation_only: ${params.vcf_annotation_only}
+        vcf_list           : ${params.vcf_list ?: '(none)'}
         outdir             : ${params.outdir}
         reference          : ${params.reference}
         snpeff_data_dir    : ${params.snpeff_data_dir}

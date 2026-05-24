@@ -30,12 +30,23 @@ DRUG_MAP = {d.lower(): d for d in DRUGS}
 OTHER_VARIANTS_COL = ("", "Other Variants")
 DR_TYPE_COL = ("", "dr_type")
 RESISTANCE_FLAG_COL = "Resistance"
+PROFILER_RESISTANCE_FLAG_COL = "Profiler Resistance"
 RESISTANCE_CONFIDENCE_LABELS = {"Assoc w R", "Assoc w R - Interim"}
 NT_SUB_RE = re.compile(r"^c\.(\d+)([ACGTN]+)>([ACGTN]+)$", re.IGNORECASE)
 NT_DELINS_RE = re.compile(r"^c\.(\d+)_(\d+)del([ACGTN]+)ins([ACGTN]+)$", re.IGNORECASE)
 COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 
-FIELDS = [RESISTANCE_FLAG_COL, "Pos", "GeneName", "Mutation", "Freq", "Confidence", "реф-й кодон", "кодон с заменой"]
+FIELDS = [
+    RESISTANCE_FLAG_COL,
+    PROFILER_RESISTANCE_FLAG_COL,
+    "Pos",
+    "GeneName",
+    "Mutation",
+    "Freq",
+    "Confidence",
+    "реф-й кодон",
+    "кодон с заменой",
+]
 
 ORDERED_COLUMNS: List[Tuple[str, str]] = [OTHER_VARIANTS_COL, DR_TYPE_COL] + [
     (drug, field) for drug in DRUGS for field in FIELDS
@@ -295,6 +306,40 @@ def is_resistance_annotation(annotation: Dict[str, Any]) -> bool:
     return annotation_label(annotation) in RESISTANCE_CONFIDENCE_LABELS
 
 
+def is_profiler_resistance_annotation(annotation: Dict[str, Any]) -> bool:
+    return annotation.get("type") == "drug_resistance"
+
+
+def mark_profiler_resistance(value: Any, is_profiler_resistance: bool) -> Any:
+    if value in (None, "") or not is_profiler_resistance:
+        return value
+    return f"{value} (R)"
+
+
+def profiler_resistance_flags(sample: Dict[str, Any]) -> Dict[str, bool]:
+    flags: Dict[str, bool] = {drug: False for drug in DRUGS}
+
+    for var in sample.get("dr_variants", []):
+        raw_items = var.get("drugs", [])
+        if not isinstance(raw_items, list) or not raw_items:
+            raw_items = var.get("annotation", [])
+        if not isinstance(raw_items, list):
+            continue
+
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            if not is_profiler_resistance_annotation(item):
+                continue
+
+            drug_name = str(item.get("drug") or "").strip().lower()
+            drug = DRUG_MAP.get(drug_name)
+            if drug:
+                flags[drug] = True
+
+    return flags
+
+
 def summarise(
     sample: Dict[str, Any],
     gene_index: Optional[Dict[str, GeneModel]] = None,
@@ -305,6 +350,7 @@ def summarise(
         (d, f): [] for d in DRUGS for f in FIELDS
     }
     resistance_flags: Dict[str, bool] = {drug: False for drug in DRUGS}
+    profiler_flags = profiler_resistance_flags(sample)
 
     other_variants = str(len(sample.get("other_variants", [])))
     dr_type = str(sample.get("drtype") or "")
@@ -362,6 +408,11 @@ def summarise(
                 if any(is_resistance_annotation(annotation) for annotation in annotations):
                     resistance_flags[d] = True
 
+                is_profiler_resistance = (
+                    current_block == "dr_variants"
+                    and any(is_profiler_resistance_annotation(annotation) for annotation in annotations)
+                )
+
                 freq_val = var.get("freq")
                 if freq_val not in (None, ""):
                     try:
@@ -369,11 +420,13 @@ def summarise(
                     except (ValueError, TypeError):
                         pass
 
+                confidence = combine_confidences(annotations)
+
                 acc((d, "Pos"), var.get("pos"))
                 acc((d, "GeneName"), var.get("gene_name"))
                 acc((d, "Mutation"), var.get("change"))
                 acc((d, "Freq"), freq_val)
-                acc((d, "Confidence"), combine_confidences(annotations), keep_blank=True)
+                acc((d, "Confidence"), mark_profiler_resistance(confidence, is_profiler_resistance), keep_blank=True)
 
                 ref_codon, alt_codon = codons_from_variant(var, gene_index)
                 acc((d, "реф-й кодон"), format_codons(ref_codon), keep_blank=True)
@@ -385,6 +438,8 @@ def summarise(
     }
     for drug, has_resistance in resistance_flags.items():
         row[(drug, RESISTANCE_FLAG_COL)] = "R" if has_resistance else ""
+    for drug, has_resistance in profiler_flags.items():
+        row[(drug, PROFILER_RESISTANCE_FLAG_COL)] = "R" if has_resistance else ""
     row[OTHER_VARIANTS_COL] = other_variants
     row[DR_TYPE_COL] = dr_type
     return row

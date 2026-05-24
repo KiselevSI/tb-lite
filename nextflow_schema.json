@@ -22,6 +22,15 @@
                     "type": "string",
                     "description": "Path to text file with one SRA accession per line."
                 },
+                "vcf_list": {
+                    "type": "string",
+                    "description": "Path to VCF samplesheet CSV with columns sample,vcf. Used with --vcf_annotation_only."
+                },
+                "vcf_annotation_only": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Annotate VCF files from --vcf_list only; skip FASTQ/SRA processing, mapping, variant calling, filtering, and reports."
+                },
                 "outdir": {
                     "type": "string",
                     "default": "./results",

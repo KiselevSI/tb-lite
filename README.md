@@ -190,6 +190,55 @@ ERR15166664
 
 Также публикуются промежуточные cohort-level VCF/annotation файлы.
 
+### VCF annotation-only
+
+Если уже есть per-sample VCF и нужно только получить SnpEff-annotated VCF без полного WGS-запуска:
+
+```bash
+nextflow run . \
+  -profile docker \
+  --vcf_annotation_only \
+  --vcf_list vcf_samples.csv \
+  --outdir results_vcf_annotation
+```
+
+Формат `vcf_samples.csv`:
+
+```csv
+sample,vcf
+sample1,/data/sample1.vcf
+sample2,/data/sample2.vcf.gz
+```
+
+Каждый входной VCF должен содержать ровно один sample column. Пайплайн переименует sample column в значение из колонки `sample` и опубликует результат в `annotate_vcf/<sample>/`.
+
+### Standalone SNP matrix из VCF
+
+Если уже есть per-sample VCF, SNP-матрицу можно построить отдельным entrypoint без полного WGS-запуска:
+
+```bash
+nextflow run snp_matrix.nf \
+  -profile docker \
+  --vcf_input vcf_samples.csv \
+  --outdir results_snp_matrix
+```
+
+Минимальный вход — обычный однообразцовый VCF (`.vcf` или `.vcf.gz`) для каждого образца. Per-sample annotated VCF не требуется: workflow сначала объединяет VCF в cohort VCF, затем запускает SnpEff и строит `FINAL_ANNOTATION_TABLE.tsv`.
+
+Формат `vcf_samples.csv`:
+
+```csv
+sample,vcf
+sample1,/data/sample1.vcf
+sample2,/data/sample2.vcf.gz
+```
+
+CSV можно создать из директории с VCF:
+
+```bash
+python make_snp_matrix_csv.py -i /data/vcf -o vcf_samples.csv
+```
+
 ## Выходные данные
 
 ### Итоговые отчёты
