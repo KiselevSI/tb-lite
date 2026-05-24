@@ -256,7 +256,15 @@ python make_snp_matrix_csv.py \
   --sample-source filename
 ```
 
-Для `--sample-source filename` параметр `--jobs` не ускоряет работу: VCF не открываются, скрипт только сканирует пути и берет sample ID из имени файла. Прогресс поиска и обработки печатается в stderr.
+Для `--sample-source filename` параметр `--jobs` распараллеливает обход входных директорий и запись временных shard-файлов. Прогресс поиска и обработки печатается в stderr:
+
+```bash
+python make_snp_matrix_csv.py \
+  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
+  -o vcf_samples.csv \
+  --sample-source filename \
+  --jobs 16
+```
 
 Если нужен именно sample ID из header, включите параллельное чтение:
 
