@@ -10,7 +10,7 @@
 #   bash build-docker-images.sh
 #
 # После сборки запускайте пайплайн:
-#   nextflow run main.nf -profile local -c docker.config
+#   nextflow run main.nf -profile docker
 
 set -euo pipefail
 
@@ -107,17 +107,41 @@ if [[ "$TARGET" == "all" ]]; then
     echo ""
     echo "=== Скачивание публичных Docker-образов ==="
 
+    # QC / reporting
     docker pull staphb/fastqc:0.12.1
-    docker pull staphb/bcftools:1.22
-    docker pull staphb/fastp:0.24.1
-    docker pull staphb/bbtools:38.96
     docker pull multiqc/multiqc:v1.30
-    docker pull broadinstitute/picard:3.4.0
-    docker pull broadinstitute/gatk:latest
+
+    # trimming / alignment / coverage
+    docker pull community.wave.seqera.io/library/fastp:1.1.0--08aa7c5662a30d57
+    docker pull community.wave.seqera.io/library/bbmap_pigz:07416fe99b090fa9
+    docker pull community.wave.seqera.io/library/bwa_htslib_samtools:83b50ff84ead50d0
+    docker pull community.wave.seqera.io/library/htslib_samtools:1.23.1--5b6bb4ede7e612e5
+    docker pull community.wave.seqera.io/library/mosdepth_htslib:0f58993cb6d93294
+
+    # variant calling / bcftools / annotation
+    docker pull quay.io/biocontainers/freebayes:1.3.10--hbefcdb2_0
+    docker pull community.wave.seqera.io/library/bcftools_htslib:1.23.1--9f08ec665533d64a
+    docker pull community.wave.seqera.io/library/picard:3.4.0--e9963040df0a9bf6
+    docker pull community.wave.seqera.io/library/snpeff:5.4.0c--e08ddc54579e82bd
+
+    # genotyping / DR / IS6110
+    docker pull staphb/tbprofiler:6.6.6
+    docker pull quay.io/biocontainers/ismapper:2.0.2--pyhdfd78af_1
+
+    # taxonomy (Kraken2 / Bracken)
+    docker pull community.wave.seqera.io/library/kraken2_coreutils_pigz:920ecc6b96e2ba71
+    docker pull community.wave.seqera.io/library/bracken:3.1--22a4e66ce04c5e01
+
+    # SRA download
+    docker pull quay.io/biocontainers/sra-tools:3.2.1--h4304569_1
+    docker pull community.wave.seqera.io/library/sra-tools_pigz:4a694d823f6f7fcf
+
+    # misc
+    docker pull ubuntu:22.04
 fi
 
 echo ""
 echo "=== Готово! ==="
 echo ""
 echo "Запуск пайплайна:"
-echo "  nextflow run main.nf -profile local -c docker.config"
+echo "  nextflow run main.nf -profile docker"
