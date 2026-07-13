@@ -14,7 +14,8 @@ process TB_MIX {
         path levels
 
     output:
-        path("${sample_name}.mix.tsv")
+        path("${sample_name}.mix.tsv"), emit: mix
+        tuple val("${task.process}"), val('tb-mix'), eval('tb_mix.py --help 2>&1 | sed -n "s/^usage: tb_mix v\\([^ ]*\\).*/\\1/p" | head -1'), topic: versions, emit: versions_tb_mix
 
     script:
         """

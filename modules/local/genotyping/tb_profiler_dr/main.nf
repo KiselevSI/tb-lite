@@ -15,6 +15,8 @@ process TB_PROFILER_DR {
     output:
     path("${sample_name}/vcf/"), emit: other
     path("${sample_name}/results/${sample_name}.results.json"), emit: json
+    tuple val("${task.process}"), val('tb-profiler'), eval('tb-profiler --version 2>&1 | sed -n "s/^.*version //p" | head -1'), topic: versions, emit: versions_tb_profiler
+    tuple val("${task.process}"), val('samtools'), eval("samtools --version | sed -n 's/^samtools //p' | head -1"), topic: versions, emit: versions_samtools
 
     script:
     """

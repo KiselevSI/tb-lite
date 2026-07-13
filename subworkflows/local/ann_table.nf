@@ -81,7 +81,7 @@ workflow ANN_TABLE {
             .join(ANN_BCFTOOLS_VIEW.out.tbi)
             .map { meta, vcf, tbi -> tuple(vcf, tbi) }
 
-        table = MAKE_TABLE(table_input)
+        table = MAKE_TABLE(table_input).table
         feature_table = Channel.fromPath(params.h37rv_feature_table)
         final_table = POST_PROCESS_TABLE(table, feature_table)
 

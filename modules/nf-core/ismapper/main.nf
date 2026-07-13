@@ -13,6 +13,7 @@ process ISMAPPER {
     output:
     tuple val(meta), path("results/*"), emit: results
     path "versions.yml"               , emit: versions
+    tuple val("${task.process}"), val('ismapper'), eval('ismap --version 2>&1 | sed -n "s/^.*ismap //p"'), topic: versions, emit: versions_ismapper
 
     when:
     task.ext.when == null || task.ext.when

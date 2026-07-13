@@ -18,7 +18,7 @@ workflow FILTER {
     main:
         ref = Channel.value(file(params.reference))
         levels = Channel.value(file(params.levels))
-        tbmix       = TB_MIX(bam_all, ref, levels)
+        tbmix       = TB_MIX(bam_all, ref, levels).mix
 
         ref_meta = [id: file(params.reference).baseName]
         ref_tuple = Channel.value([ref_meta, file(params.reference)])

@@ -23,6 +23,7 @@ workflow REPORTS {
         skip_multiqc = params.skip_multiqc || params.skip_reports
         skip_final_reports = params.skip_final_reports || params.skip_reports
         final_table = Channel.empty()
+        versions = Channel.empty()
         rd = del.map { _sample_name, path -> path }  // извлекаем только пути из канала del
         kraken_combined_tables = (!params.skip_kraken && params.kraken2_db)
             ? kraken_combined.map { meta, path -> path }.collect()
@@ -47,6 +48,9 @@ workflow REPORTS {
                     [[id: 'multiqc'], files, cfg, [], [], []]
                 }
             )
+            versions = MULTIQC.out.versions.map { _process_name, program, version ->
+                tuple(program, version)
+            }
         }
 
         if (!skip_final_reports) {
@@ -79,4 +83,5 @@ workflow REPORTS {
 
     emit:
         final_table
+        versions
 }

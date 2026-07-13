@@ -21,6 +21,7 @@ process TB_PLATFORM_TABLES {
 
     output:
     path "filter.tbmix.tsv"
+    path "tbmix.total.tsv"
     path "drug_resist.xlsx"
     path "drug_resist_and_uncertain.xlsx"
     path "general.tsv"

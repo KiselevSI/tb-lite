@@ -39,7 +39,7 @@ workflow GENOTYPE {
         bam_good
 
     main:
-        tblg_table = TBLG(vcf)
+        tblg_table = TBLG(vcf).lg
 
         paired_reads = trimmed_reads
             .filter { _id, files -> files.size() == 2 }

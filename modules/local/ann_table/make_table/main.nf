@@ -12,7 +12,8 @@ process MAKE_TABLE {
     tuple path(vcf), path(tbi)
 
   output:
-    path "ANNOTATION_TABLE.tsv"
+    path "ANNOTATION_TABLE.tsv", emit: table
+    tuple val("${task.process}"), val('SnpSift'), eval('SNPSIFT_BIN=$(command -v SnpSift || command -v snpSift || command -v snpsift || true); if [ -n "$SNPSIFT_BIN" ]; then "$SNPSIFT_BIN"; elif [ -x /opt/snpEff/exec/snpsift ]; then /opt/snpEff/exec/snpsift; fi 2>&1 | sed -n "s/^SnpSift version \\([^ ]*\\).*/\\1/p" | head -1'), topic: versions, emit: versions_snpsift
 
   script:
   """

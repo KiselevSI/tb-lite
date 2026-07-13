@@ -15,6 +15,7 @@ process PREPARE_VCF_ANNOTATION_INPUT {
 
     output:
     tuple val(meta), path("${meta.id}.vcf_annotation_input.vcf.gz"), path("${meta.id}.vcf_annotation_input.vcf.gz.tbi"), emit: vcf
+    tuple val("${task.process}"), val('bcftools'), eval("bcftools --version | sed -n 's/^bcftools //p' | head -1"), topic: versions, emit: versions_bcftools
 
     script:
     """

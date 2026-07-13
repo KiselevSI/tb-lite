@@ -17,7 +17,7 @@ process SNPEFF_SNPEFF {
     tuple val(meta), val("${task.process}"), val('snpeff'), path("*.csv"), topic: multiqc_files, emit: report
     tuple val(meta), val("${task.process}"), val('snpeff'), path("*.html"), topic: multiqc_files, emit: summary_html
     tuple val(meta), val("${task.process}"), val('snpeff'), path("*.genes.txt"), topic: multiqc_files, emit: genes_txt
-    tuple val("${task.process}"), val('snpeff'), eval("snpEff -version 2>&1 | cut -f 2 -d '\t'"), topic: versions, emit: versions_snpeff
+    tuple val("${task.process}"), val('snpeff'), eval("snpEff -version 2>&1 | sed -n 's/^SnpEff[[:space:]]*\\([^[:space:]]*\\).*/\\1/p' | head -1"), topic: versions, emit: versions_snpeff
 
     when:
     task.ext.when == null || task.ext.when

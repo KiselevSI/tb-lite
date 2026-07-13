@@ -10,6 +10,7 @@ include { KRAKEN }      from '../subworkflows/local/kraken'
 include { ANN_TABLE }   from '../subworkflows/local/ann_table'
 include { REPORTS }     from '../subworkflows/local/reports'
 include { VCF_ANNOTATION } from '../subworkflows/local/vcf_annotation'
+include { VERSIONS }     from '../subworkflows/local/versions'
 
 workflow TBLITE {
     main:
@@ -21,6 +22,7 @@ workflow TBLITE {
     ch_fastqc = Channel.empty()
     ch_kraken_multiqc = Channel.empty()
     ch_kraken_combined = Channel.empty()
+    ch_extra_versions = Channel.empty()
 
     if (params.vcf_annotation_only) {
         VCF_ANNOTATION(params.vcf_list)
@@ -59,7 +61,7 @@ workflow TBLITE {
         }
 
         if (!skip_multiqc || !skip_final_reports) {
-            REPORTS(
+            reports = REPORTS(
                 filt.wgs_metrics,
                 filt.align_metrics,
                 trim.fastp_json,
@@ -75,6 +77,9 @@ workflow TBLITE {
                 gen.dr,
                 gen.del
             )
+            ch_extra_versions = reports.versions
         }
     }
+
+    VERSIONS(ch_extra_versions)
 }

@@ -15,6 +15,7 @@ process RD {
     output:
         tuple val(sample_name), path("${sample_name}.novel_rd.tsv"), emit: rd
         path("${sample_name}.known_rd.tsv")
+        tuple val("${task.process}"), val('rd-scanner'), val('1.0'), topic: versions, emit: versions_rd_scanner
 
     script:
         """

@@ -12,7 +12,8 @@ process TBLG {
         tuple val(sample_name), path(vcf), path(vcf_csi)
 
     output:
-        path("${sample_name}.lg.tsv")
+        path("${sample_name}.lg.tsv"), emit: lg
+        tuple val("${task.process}"), val('tblg'), eval('tblg --version 2>&1 | sed -n "s/^tblg, version //p" | head -1'), topic: versions, emit: versions_tblg
 
     script:
 
