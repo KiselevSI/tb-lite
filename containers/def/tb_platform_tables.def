@@ -2,12 +2,16 @@ Bootstrap: docker
 From: python:3.12-slim
 
 
+# Скрипты пайплайн запускает из bin/ через ${projectDir}; копии внутри образа
+# нужны только для ручных запусков, поэтому берём их из того же bin/.
 %files
-    assets/scripts/filter_tbmix.py        /opt/filter_tbmix.py
-    assets/scripts/build_metrics_table.py /opt/build_metrics_table.py
-    assets/scripts/build_general_table.py /opt/build_general_table.py
-    assets/scripts/deletions_to_csv.py    /opt/deletions_to_csv.py
-    assets/scripts/profiler_parser.py     /opt/profiler_parser.py
+    bin/filter_tbmix.py         /opt/filter_tbmix.py
+    bin/build_metrics_table.py  /opt/build_metrics_table.py
+    bin/build_general_table.py  /opt/build_general_table.py
+    bin/build_is6110_tables.py  /opt/build_is6110_tables.py
+    bin/build_spoligo_table.py  /opt/build_spoligo_table.py
+    bin/concat_tables.py        /opt/concat_tables.py
+    bin/profiler_parser.py      /opt/profiler_parser.py
 
 %post
     set -e
@@ -19,17 +23,12 @@ From: python:3.12-slim
 
     pip install --no-cache-dir pandas xlsxwriter openpyxl biopython
 
-    chmod +x /opt/filter_tbmix.py
-    chmod +x /opt/build_metrics_table.py
-    chmod +x /opt/build_general_table.py
-    chmod +x /opt/deletions_to_csv.py
-    chmod +x /opt/profiler_parser.py
-
-    ln -s /opt/filter_tbmix.py /usr/local/bin/filter_tbmix.py
-    ln -s /opt/build_metrics_table.py /usr/local/bin/build_metrics_table.py
-    ln -s /opt/build_general_table.py /usr/local/bin/build_general_table.py
-    ln -s /opt/deletions_to_csv.py /usr/local/bin/deletions_to_csv.py
-    ln -s /opt/profiler_parser.py /usr/local/bin/profiler_parser.py
+    for script in filter_tbmix build_metrics_table build_general_table \
+                  build_is6110_tables build_spoligo_table concat_tables \
+                  profiler_parser; do
+        chmod +x "/opt/${script}.py"
+        ln -s "/opt/${script}.py" "/usr/local/bin/${script}.py"
+    done
 
 
 %environment

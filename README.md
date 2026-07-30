@@ -173,12 +173,28 @@ ERR15166664
 
 Процесс `TB_PLATFORM_TABLES` публикует отдельные файлы в `Reports/tb-platform/`:
 
-- `general.tsv`
-- `filter.tbmix.tsv`
-- `drug_resist.xlsx`
-- `drug_resist_and_uncertain.xlsx`
-- `spotyping.total.tsv`
-- `rd.tsv`
+| Файл | Содержимое | Импорт в TB Platform |
+| --- | --- | --- |
+| `general.tsv` | Метрики покрытия и выравнивания | `scripts/import_new_core_data.py` |
+| `filter.tbmix.tsv` | TB-Mix + линии после фильтрации | — |
+| `drug_resist.xlsx` | Лекарственная устойчивость | `backend/scripts/import_drug_resist_xlsx.py` |
+| `drug_resist_and_uncertain.xlsx` | То же плюс uncertain-варианты | — |
+| `spotyping.total.tsv` | `Sample`/`SpolBin`/`Spol8` | `general_spoligo` |
+| `spotyping.full.tsv` | То же плюс `MinReads`/`RminReads` и SIT/клада/география из SpolDB4 | справочно |
+| `spoligo_spacer_counts.tsv` | Число ридов на каждый из 43 спейсеров | `general_spoligo_spacers` |
+| `rd.tsv` | Known + novel RD-делеции, 19 колонок (`rd_scan.py`) | `scripts/import_deletions_full.py` |
+
+Процесс `IS6110_TABLES` публикует в `Reports/tb-platform/is6110/` нормализованные
+таблицы вставок IS6110 — каталог целиком принимает
+`backend/scripts/import_is6110_tsv.py --input-dir`:
+
+- `is_element.tsv`, `is6110_site.tsv`, `ismapper_run.tsv`,
+  `sample_is6110_site.tsv`, `is6110_removed_hit.tsv`, `is6110_sample_summary.tsv`
+- диагностика: `import_stats.tsv`, `missing_samples.tsv`, `duplicate_runs.tsv`,
+  `is6110_import_warnings.tsv`
+
+ISMapper запускается только по paired-образцам, поэтому для набора целиком из
+single-end данных таблицы публикуются пустыми (только шапки).
 
 ### `Reports/snp_matrix`
 
