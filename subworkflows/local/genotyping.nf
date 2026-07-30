@@ -2,9 +2,10 @@
  * genotyping.nf : spoligotyping + is6110 + rd
  * IN : bam_good  – tuple val(sample_name), path(bam)
  *      reference – path(ref.fa)
- * OUT: spoligo   – tuple val(sample_name), path(spoligotyping.txt)
- *      is6110    – tuple val(sample_name), path(is6110.bed)
- *      rd        – tuple val(sample_name), path(read_depth.tab)
+ * OUT: spol_table – path(<sample>.tsv)          — Sample/SpolBin/Spol8
+ *      spol_log   – path(<sample>.log)          — лог SpoTyping (спейсеры, min/rmin)
+ *      is6110     – tuple val(meta), path(results/*) — вывод ISMapper (только paired)
+ *      del        – tuple val(sample_name), path(<sample>.rd.tsv)
  */
 
 include { ISMAPPER } from '../../modules/nf-core/ismapper/main'
@@ -51,9 +52,11 @@ workflow GENOTYPE {
                 [[id: sample_name], files.sort { it.name }, file(params.gbk), file(params.is6110)]
             }
 
-        ISMAPPER(ismapper_reads)
+        is6110 = ISMAPPER(ismapper_reads).results
 
-        spol_table = SPOTYPING(trimmed_reads).table
+        SPOTYPING(trimmed_reads)
+        spol_table = SPOTYPING.out.table
+        spol_log = SPOTYPING.out.log
 
         ref_meta = [id: file(params.reference).baseName]
         ref = Channel.value([ref_meta, file(params.reference)])
@@ -78,6 +81,8 @@ workflow GENOTYPE {
     emit:
         tblg_table
         spol_table
+        spol_log
+        is6110
         dr
         del
 

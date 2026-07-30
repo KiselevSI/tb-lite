@@ -1,5 +1,6 @@
-# rd -- runtime dependencies for region depth analysis
-# The rd.py entrypoint is provided by Nextflow from the pipeline bin/ directory.
+# rd -- runtime for RD (region of difference) scanning.
+# The rd_scan.py entrypoint is provided by Nextflow from the pipeline bin/ directory
+# and depends only on the Python standard library.
 
 FROM python:3.11-slim
 
@@ -12,7 +13,5 @@ ENV LC_ALL=C.UTF-8 \
 
 RUN set -e \
     && apt-get update \
-    && apt-get install -y --no-install-recommends \
-       build-essential procps \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir numpy pandas
+    && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*

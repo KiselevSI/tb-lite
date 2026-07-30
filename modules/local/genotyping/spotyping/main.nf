@@ -15,6 +15,7 @@ process SPOTYPING {
         path("$sample_name.*"), emit: other
         path("$sample_name"), emit: code
         path("${sample_name}.tsv"), emit: table
+        path("${sample_name}.log"), emit: log
         tuple val("${task.process}"), val('SpoTyping'), eval('SpoTyping.py --version 2>&1 | sed -n "s/^SpoTyping.py[[:space:]]*//p" | head -1'), topic: versions, emit: versions_spotyping
 
     script:

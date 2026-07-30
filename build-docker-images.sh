@@ -78,7 +78,7 @@ build_all_images() {
     build_ann_table_image
     build_report_images
     docker build -t tb-lite/tb-mix:1.0          -f containers/dockerfiles/tb_mix.Dockerfile          .
-    docker build -t tb-lite/rd-scanner:1.0      -f containers/dockerfiles/rd.Dockerfile              .
+    docker build -t tb-lite/rd-scanner:2.0      -f containers/dockerfiles/rd.Dockerfile              .
     build_spotyping_image
     docker build -t tb-lite/tblg:1.0            -f containers/dockerfiles/tblg.Dockerfile            .
 }

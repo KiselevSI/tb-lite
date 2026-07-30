@@ -13,11 +13,19 @@ workflow BATCH_REPORTS {
         samtools_flagstat = Channel.fromPath("${params.outdir}/stats/samtools/flagstat/*/*.flagstat", checkIfExists: true)
         tbmix = Channel.fromPath("${params.outdir}/tb-mix/*.mix.tsv", checkIfExists: true)
         spotyping = Channel.fromPath("${params.outdir}/spotyping/*/*.tsv", checkIfExists: true)
+        spotyping_logs = Channel.fromPath("${params.outdir}/spotyping/*/*.log", checkIfExists: true)
         tblg_table = Channel.fromPath("${params.outdir}/lineage/*.lg.tsv", checkIfExists: true)
         drugs = Channel.fromPath("${params.outdir}/tb-profiler/drug-resist/*/results/*.results.json", checkIfExists: true)
         del = Channel
-            .fromPath("${params.outdir}/rd/*/*.novel_rd.tsv", checkIfExists: true)
-            .map { path -> tuple(path.name.replaceFirst(/\.novel_rd\.tsv$/, ''), path) }
+            .fromPath("${params.outdir}/rd/*/*.rd.tsv", checkIfExists: true)
+            .map { path -> tuple(path.name.replaceFirst(/\.rd\.tsv$/, ''), path) }
+
+        // REPORTS ждёт канал в форме вывода ISMAPPER: tuple(meta, files).
+        // Глубина пути под is6110/ разнилась между версиями пайплайна, поэтому
+        // ищем рекурсивно, а имя образца берём из имени файла.
+        is6110 = Channel
+            .fromPath("${params.outdir}/is6110/**/*__*_table{,.txt}")
+            .map { path -> tuple([id: path.name.replaceFirst(/__.*$/, '')], path) }
 
         kraken_reports = (!params.skip_kraken && params.kraken2_db)
             ? Channel.fromPath("${params.outdir}/kraken2/kraken2/*/*/*.kraken2.report.txt", checkIfExists: true)
@@ -41,9 +49,11 @@ workflow BATCH_REPORTS {
             kraken_combined,
             tbmix,
             spotyping,
+            spotyping_logs,
             tblg_table,
             drugs,
-            del
+            del,
+            is6110
         )
 }
 

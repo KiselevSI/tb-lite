@@ -14,10 +14,12 @@ process TB_PLATFORM_TABLES {
     path samtools_flagstat
     path tbmix
     path spotyping
+    path spotyping_logs
     path tblg_table
     path drugs
     path rd
     path gbk
+    path spoldb4
 
     output:
     path "filter.tbmix.tsv"
@@ -26,6 +28,8 @@ process TB_PLATFORM_TABLES {
     path "drug_resist_and_uncertain.xlsx"
     path "general.tsv"
     path "spotyping.total.tsv"
+    path "spotyping.full.tsv"
+    path "spoligo_spacer_counts.tsv"
     path "rd.tsv"
 
 
@@ -48,6 +52,7 @@ process TB_PLATFORM_TABLES {
     write_list samtools_flagstat.list $samtools_flagstat
     write_list tbmix.list $tbmix
     write_list spotyping.list $spotyping
+    write_list spotyping_logs.list $spotyping_logs
     write_list tblg_table.list $tblg_table
     write_list drugs.list $drugs
     write_list rd.list $rd
@@ -69,6 +74,17 @@ process TB_PLATFORM_TABLES {
 
     python ${projectDir}/bin/profiler_parser.py --input-list drugs.list -g $gbk --flat-header --include-other-uncertain -o drug_resist_and_uncertain.xlsx
 
-    python ${projectDir}/bin/deletions_to_csv.py --input-list rd.list -o rd.tsv
+    # Полная spoligo-таблица для сайта: 43 спейсера, min/rmin и SIT/clade (SpolDB4).
+    # spotyping.total.tsv остаётся трёхколоночным — его формат ждут импортёры сайта.
+    python ${projectDir}/bin/build_spoligo_table.py \\
+        --spoligo-list spotyping.list \\
+        --log-list spotyping_logs.list \\
+        --spoldb4 $spoldb4 \\
+        --count tolerant \\
+        --spacers-output spoligo_spacer_counts.tsv \\
+        --full-output spotyping.full.tsv
+
+    # rd_scan.py уже пишет per-sample TSV в формате сайта — остаётся склеить.
+    python ${projectDir}/bin/concat_tables.py --input-list rd.list --keep-header -o rd.tsv
     """
 }

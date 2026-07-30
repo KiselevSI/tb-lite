@@ -73,9 +73,11 @@ workflow TBLITE {
                 ch_kraken_combined,
                 filt.tbmix,
                 gen.spol_table,
+                gen.spol_log,
                 gen.tblg_table,
                 gen.dr,
-                gen.del
+                gen.del,
+                gen.is6110
             )
             ch_extra_versions = reports.versions
         }

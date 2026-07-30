@@ -86,6 +86,10 @@
                     "type": "string",
                     "description": "IS6110 FASTA for ISMapper."
                 },
+                "spoldb4": {
+                    "type": "string",
+                    "description": "SpolDB4 reference TSV (octal -> SIT/clade) for the full spoligotyping table."
+                },
                 "levels": {
                     "type": "string",
                     "description": "TB-Mix levels TSV."
