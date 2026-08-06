@@ -168,9 +168,15 @@ process SNP_DB_SHARDS {
 ### Компонент 3: `SNP_DB_TABLES` в `batch_reports.nf`
 
 Собирает итог из шардов. Если каталог `snp_db/shards/` пуст — строит шарды сам из
-`${params.outdir}/annotate_vcf/**/*.annotated.ann.vcf` через `.collate(500)`. Это
+`${params.outdir}/annotate_vcf/*/*.annotated.ann.vcf` через `.collate(500)`. Это
 покрывает сценарий «пайплайн уже отработал, таблицы нужны задним числом» — например,
 для готового прогона `/mnt/data1/tb-lite-runs/bc1286ed-5e2e-42db-a06c-0a5a02258824`.
+
+Помимо вызова внутри `BATCH_REPORTS` есть отдельная точка входа
+`batch_reports.nf -entry SNP_DB_ONLY` — только SNP-таблицы, без остальных отчётов.
+Она нужна потому, что `BATCH_REPORTS` объявляет входные каналы с
+`checkIfExists: true` и падает целиком, если в каталоге прогона пуст хотя бы один
+из его глобов.
 
 Склейка:
 
@@ -272,9 +278,12 @@ canon AS (SELECT site_id, min(site_id) OVER (PARTITION BY chrom,pos,ref,alt) AS 
   уникальны, `(sample_id, pos, alt)` в `vcfrows.*` уникальны;
 - у sites с одинаковым `site_key` от разных образцов остался максимальный `qual`.
 
-**Интеграционный.** `import_snp.sql` прогоняется против локальной пустой БД
-(`docker exec tb_platform_db`, схема на `alembic head`), предварительно в `general`
-вставляются три sample_id. Проверки:
+**Интеграционный.** `import_snp.sql` прогоняется против **одноразового** контейнера
+`postgres:17` со случайным именем: тест сам создаёт минимальную схему, заполняет её и
+удаляет контейнер в teardown. К существующим базам тест не подключается — на
+дев-машине в `tb_platform_db` лежит полная копия боевых данных, и незаскоупленный
+`DELETE` там необратим. Тест выключен по умолчанию и включается переменной
+`TB_LITE_SNP_DB_TEST=1`. Проверки:
 
 - счётчики строк в `snp_sites` / `sample_snp_alleles` / `vcf_table` совпадают
   с `snp_db_manifest.tsv`;
@@ -282,9 +291,15 @@ canon AS (SELECT site_id, min(site_id) OVER (PARTITION BY chrom,pos,ref,alt) AS 
   для маски `union`;
 - повторный запуск того же `import_snp.sql` даёт 0 новых строк во всех четырёх таблицах.
 
-**Проверка на живом пайплайне.** `nextflow run batch_reports.nf --outdir <прогон
-bc1286ed-…>` на готовом прогоне без шардов — проверяет ветку автосборки шардов из
-`annotate_vcf/`.
+**Проверка на живом пайплайне.** Только настоящие точки входа — у отдельного
+тестового workflow в подкаталоге `projectDir` указывает не на корень репозитория,
+и `${projectDir}/bin/...` не резолвится:
+
+- `nextflow run batch_reports.nf -entry SNP_DB_ONLY --outdir <копия прогона
+  bc1286ed-… без snp_db/>` — ветка автосборки шардов из `annotate_vcf/`;
+- `nextflow run main.nf --input samplesheet.host.csv --batch_tag batch_1` на трёх
+  образцах — связка `CALLVAR → SNP_DB`, и сверка `site_key` для pos 1977/4013
+  с продовыми значениями на живом выводе пайплайна.
 
 ## Изменения в конфигурации
 
