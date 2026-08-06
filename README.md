@@ -581,6 +581,13 @@ nextflow run batch_reports.nf -entry SNP_DB_ONLY \
 2. Финальный `batch_reports.nf` склеивает все шарды в три таблицы,
    дедуплицируя `snp_sites` по `site_key` с максимальным `QUAL`.
 
+`run_batches.sh` менять не нужно: `--batch_tag batch_${i}` он уже передаёт,
+а финальный `batch_reports.nf` подхватывает готовые шарды.
+
+Не запускайте batch-режим с `--mode link` или `--mode symlink`: `run_batches.sh`
+чистит `work/` после каждого батча, и шарды-симлинки станут битыми. По умолчанию
+`mode = copy`, этого и держитесь.
+
 Если прогон уже отработал без шардов, их можно собрать задним числом
 из `annotate_vcf/` — см. `-entry SNP_DB_ONLY` ниже.
 
