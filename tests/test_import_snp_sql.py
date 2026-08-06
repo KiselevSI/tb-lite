@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -144,15 +145,27 @@ VALUES ('union', 'NC_000962.3', int4range(4000, 4100));
 """
 
 
-def _docker_available():
+def _opted_in():
+    """Тест выключен по умолчанию и не запускается вместе с остальными.
+
+    Он поднимает собственный одноразовый Postgres и к рабочим базам не
+    подключается, но включать его нужно осознанно:
+        TB_LITE_SNP_DB_TEST=1 python3 -m unittest tests.test_import_snp_sql
+    """
+    if os.environ.get("TB_LITE_SNP_DB_TEST") != "1":
+        return False
     if shutil.which("docker") is None:
         return False
     return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
 
 
-@unittest.skipUnless(_docker_available(), "нужен работающий docker")
+@unittest.skipUnless(_opted_in(), "выключен; включается TB_LITE_SNP_DB_TEST=1")
 class ImportSnpSqlIntegrationTest(unittest.TestCase):
-    """Прогон import_snp.sql против одноразового Postgres."""
+    """Прогон import_snp.sql против одноразового Postgres.
+
+    Никогда не подключается к существующим базам: создаёт свой контейнер
+    postgres:17 со случайным именем и удаляет его в teardown.
+    """
 
     container: str = ""
 
