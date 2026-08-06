@@ -1,5 +1,8 @@
 import csv
+import gzip
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -73,6 +76,89 @@ class ExtractFromVcfTest(unittest.TestCase):
     def test_site_keys_unique_within_sample(self):
         keys = [row[0] for row in self.result.sites]
         self.assertEqual(len(keys), len(set(keys)))
+
+
+def _read_gz_rows(path):
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+        return [row for row in csv.reader(handle, delimiter="\t") if row]
+
+
+def _make_variant_vcf(target: Path, sample: str, qual_factor: float) -> Path:
+    """Копия фикстуры с другим именем образца и изменённым QUAL."""
+    lines = []
+    for line in FIXTURE.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#CHROM"):
+            lines.append(line.replace("ERR4797591", sample))
+        elif line.startswith("#"):
+            lines.append(line)
+        else:
+            parts = line.split("\t")
+            parts[5] = f"{float(parts[5]) * qual_factor:.2f}"
+            lines.append("\t".join(parts))
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return target
+
+
+class ShardCliTest(unittest.TestCase):
+    """Два образца с одинаковыми сайтами, но разным QUAL: проверяем дедупликацию."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(cls._tmp.name)
+
+        second = _make_variant_vcf(tmp / "SAMPLE2.annotated.ann.vcf", "SAMPLE2", 0.5)
+
+        file_list = tmp / "vcfs.txt"
+        file_list.write_text(f"{FIXTURE}\n{second}\n", encoding="utf-8")
+
+        cls.outdir = tmp / "out"
+        subprocess.run(
+            [sys.executable, str(REPO_ROOT / "bin" / "vcf_to_snp_shards.py"),
+             "--file-list", str(file_list), "--tag", "batch_1",
+             "-o", str(cls.outdir), "-j", "2"],
+            check=True,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_writes_expected_files(self):
+        for name in ("sites.batch_1.tsv.gz", "alleles.batch_1.tsv.gz",
+                     "vcfrows.batch_1.tsv.gz", "samples.batch_1.txt",
+                     "counts.batch_1.tsv"):
+            self.assertTrue((self.outdir / name).exists(), name)
+
+    def test_shards_have_no_header(self):
+        first = _read_gz_rows(self.outdir / "alleles.batch_1.tsv.gz")[0]
+        self.assertNotEqual(first[0], "sample_id")
+
+    def test_row_counts(self):
+        # 8 уникальных site_key на два образца, по 8 аллелей и 7 vcf-строк на образец
+        self.assertEqual(len(_read_gz_rows(self.outdir / "sites.batch_1.tsv.gz")), 8)
+        self.assertEqual(len(_read_gz_rows(self.outdir / "alleles.batch_1.tsv.gz")), 16)
+        self.assertEqual(len(_read_gz_rows(self.outdir / "vcfrows.batch_1.tsv.gz")), 14)
+
+    def test_sites_keep_max_qual(self):
+        rows = _read_gz_rows(self.outdir / "sites.batch_1.tsv.gz")
+        by_pos = {int(row[2]): float(row[5]) for row in rows}
+        # У ERR4797591 QUAL вдвое выше, значит должен победить он
+        self.assertAlmostEqual(by_pos[1977], 1643.47, places=2)
+
+    def test_samples_file(self):
+        samples = (self.outdir / "samples.batch_1.txt").read_text().split()
+        self.assertEqual(sorted(samples), ["ERR4797591", "SAMPLE2"])
+
+    def test_counts_file(self):
+        counts = dict(
+            line.split("\t")
+            for line in (self.outdir / "counts.batch_1.tsv").read_text().splitlines()
+        )
+        self.assertEqual(counts["sites"], "8")
+        self.assertEqual(counts["alleles"], "16")
+        self.assertEqual(counts["vcfrows"], "14")
+        self.assertEqual(counts["samples"], "2")
 
 
 if __name__ == "__main__":

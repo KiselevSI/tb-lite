@@ -440,3 +440,118 @@ def extract_from_vcf(path: Path) -> ExtractResult:
                     ])
 
     return ExtractResult(sample_id, list(sites.values()), alleles, vcf_rows)
+
+
+def _write_rows(path: Path, rows: Sequence[Sequence[str]]) -> None:
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        writer.writerows(rows)
+
+
+def _worker(task):
+    index, path_str, tmpdir_str = task
+    tmpdir = Path(tmpdir_str)
+    try:
+        result = extract_from_vcf(Path(path_str))
+    except Exception as exc:  # шард одного образца не должен ронять весь батч
+        return {"index": index, "sample_id": None, "error": f"{type(exc).__name__}: {exc}"}
+    _write_rows(tmpdir / f"sites_{index:09d}.tsv", result.sites)
+    _write_rows(tmpdir / f"alleles_{index:09d}.tsv", result.alleles)
+    _write_rows(tmpdir / f"vcfrows_{index:09d}.tsv", result.vcf_rows)
+    return {"index": index, "sample_id": result.sample_id, "error": None}
+
+
+def _read_paths(file_list: Path) -> List[Path]:
+    paths: List[Path] = []
+    seen: set = set()
+    with open(file_list, "r", encoding="utf-8") as handle:
+        for line in handle:
+            raw = line.strip()
+            if not raw or raw.startswith("#"):
+                continue
+            key = os.path.abspath(raw)
+            if key in seen:
+                continue
+            seen.add(key)
+            paths.append(Path(key))
+    return paths
+
+
+def _merge_shards(tmpdir: Path, outdir: Path, tag: str) -> Dict[str, int]:
+    sites: Dict[str, List[str]] = {}
+    for shard in sorted(tmpdir.glob("sites_*.tsv")):
+        with open(shard, "r", encoding="utf-8", newline="") as handle:
+            for row in csv.reader(handle, delimiter="\t"):
+                if not row:
+                    continue
+                previous = sites.get(row[0])
+                if previous is None or _site_qual(row) > _site_qual(previous):
+                    sites[row[0]] = row
+
+    counts = {"sites": 0, "alleles": 0, "vcfrows": 0}
+    with gzip.open(outdir / f"sites.{tag}.tsv.gz", "wt", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        for row in sites.values():
+            writer.writerow(row)
+            counts["sites"] += 1
+
+    for kind in ("alleles", "vcfrows"):
+        with gzip.open(outdir / f"{kind}.{tag}.tsv.gz", "wt", encoding="utf-8", newline="") as out:
+            for shard in sorted(tmpdir.glob(f"{kind}_*.tsv")):
+                with open(shard, "r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if line.strip():
+                            out.write(line)
+                            counts[kind] += 1
+    return counts
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--file-list", required=True, type=Path,
+                        help="Текстовый файл со списком путей к VCF, по одному на строку.")
+    parser.add_argument("--tag", required=True, help="Тег шарда, попадает в имена файлов.")
+    parser.add_argument("-o", "--out", required=True, type=Path, help="Каталог вывода.")
+    parser.add_argument("-j", "--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    args = parser.parse_args(argv)
+
+    paths = _read_paths(args.file_list)
+    if not paths:
+        eprint(f"ERROR: пустой список VCF: {args.file_list}")
+        return 1
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    samples: List[str] = []
+    errors: List[str] = []
+
+    with tempfile.TemporaryDirectory(dir=str(args.out)) as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
+        tasks = [(i, str(path), tmpdir_str) for i, path in enumerate(paths)]
+        with cf.ProcessPoolExecutor(max_workers=args.jobs) as pool:
+            for outcome in pool.map(_worker, tasks, chunksize=8):
+                if outcome["error"]:
+                    errors.append(f"{paths[outcome['index']]}: {outcome['error']}")
+                else:
+                    samples.append(outcome["sample_id"])
+        counts = _merge_shards(tmpdir, args.out, args.tag)
+
+    samples = sorted(set(samples))
+    (args.out / f"samples.{args.tag}.txt").write_text(
+        "".join(f"{name}\n" for name in samples), encoding="utf-8"
+    )
+    counts["samples"] = len(samples)
+    (args.out / f"counts.{args.tag}.tsv").write_text(
+        "".join(f"{key}\t{value}\n" for key, value in counts.items()), encoding="utf-8"
+    )
+
+    for message in errors:
+        eprint(f"WARNING: {message}")
+    eprint(
+        f"[{args.tag}] samples={counts['samples']} sites={counts['sites']} "
+        f"alleles={counts['alleles']} vcfrows={counts['vcfrows']} errors={len(errors)}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
