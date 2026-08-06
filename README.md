@@ -513,8 +513,24 @@ nextflow run main.nf \
    - `--skip_snp_matrix`
 3. Все sample-level outputs складываются в один общий `outdir`.
 4. После последнего успешного батча запускается `batch_reports.nf`, который собирает:
-   - один общий `Reports/`
+   - один общий `Reports/` (включая `Reports/tb-platform/snp/`)
    - один общий `multiqc/`
+
+### Только SNP-таблицы для готового прогона
+
+Если каталог с результатами уже есть, а SNP-таблиц в нём нет, их можно
+собрать отдельно — без остальных отчётов:
+
+```bash
+nextflow run batch_reports.nf -entry SNP_DB_ONLY \
+  -profile docker \
+  --outdir /data/results_batches
+```
+
+Если `snp_db/shards/` пуст, шарды соберутся из `annotate_vcf/` пачками по 500.
+Отдельная точка входа нужна потому, что полный `batch_reports.nf` объявляет
+входные каналы с `checkIfExists: true` и падает целиком, если в каталоге
+прогона пуст хотя бы один из его глобов.
 
 ### Batch + Kraken
 
@@ -533,6 +549,66 @@ nextflow run main.nf \
 ```
 
 По умолчанию `run_batches.sh` использует профиль `conda`.
+
+## SNP-таблицы для TB Platform
+
+Пайплайн генерирует файлы, которыми образцы добавляются на сайт. Итог —
+в `<outdir>/Reports/tb-platform/snp/`:
+
+| Файл | Назначение |
+|---|---|
+| `snp_sites.tsv.gz` | каталог аннотированных сайтов; `site_id` выдаёт БД по `site_key` |
+| `sample_snp_alleles.tsv.gz` | аллели образцов — SNP matrix TSV и поиск по SNP |
+| `vcf_table.tsv.gz` | плоская таблица `sample_id/pos/alt` — поиск и clade-признаки |
+| `import_snp.sql` | psql-скрипт загрузки |
+| `snp_db_manifest.tsv` | счётчики строк для сверки |
+| `samples.txt` | список загружаемых образцов |
+
+Источник — per-sample `annotate_vcf/<sample>/<sample>.annotated.ann.vcf` после snpEff.
+Пишется **всё содержимое VCF**: SNP, инделы, complex и mnp, без фильтров и без масок.
+
+`site_key` — sha1 от `chrom, pos, ref, alt` и полей ANN. Формула совпадает
+с продовой таблицей `snp_sites`, поэтому новые данные схлопываются
+с существующими через `ON CONFLICT (site_key)`.
+
+Отключается флагом `--skip_snp_db`.
+
+### Как это работает в batch-режиме
+
+1. Каждый батч `main.nf` пишет свои шарды в `<outdir>/snp_db/shards/`
+   (одна задача на батч, тег из `--batch_tag`, который `run_batches.sh`
+   уже передаёт). Перезапуск батча перезаписывает те же файлы, дублей не будет.
+2. Финальный `batch_reports.nf` склеивает все шарды в три таблицы,
+   дедуплицируя `snp_sites` по `site_key` с максимальным `QUAL`.
+
+Если прогон уже отработал без шардов, их можно собрать задним числом
+из `annotate_vcf/` — см. `-entry SNP_DB_ONLY` ниже.
+
+### Импорт в базу
+
+Порядок важен: `general.tsv` должен быть импортирован раньше — на
+`sample_snp_alleles.sample_id` висит внешний ключ на `general."ID"`.
+
+```bash
+psql "$DATABASE_URL" -f <outdir>/Reports/tb-platform/snp/import_snp.sql
+```
+
+`\copy` выполняется на стороне клиента, поэтому каталог с `.tsv.gz` должен быть
+виден тому процессу, который запускает psql. Если psql запускается в контейнере,
+каталог надо смонтировать и перегенерировать SQL с путём внутри контейнера:
+
+```bash
+python bin/write_import_snp_sql.py --data-dir /mnt/snp -o import_snp.sql
+```
+
+Повторный запуск импорта безопасен: `snp_sites` схлопывается по `site_key`,
+`sample_snp_alleles` — по первичному ключу, `vcf_table` перезаписывается по
+списку входящих образцов, профили обновляются.
+
+Последним шагом тот же SQL достраивает `sample_snp_profiles` по маскам из
+`snp_masks` / `snp_mask_regions`. Если таблица масок пуста, шаг пропускается
+с предупреждением — маски заливаются отдельно
+(`tb-platform/deploy/rebuild_snp_profiles_masked.sql`).
 
 ## Примечания
 

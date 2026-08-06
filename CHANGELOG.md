@@ -15,6 +15,14 @@
 
 ### Added
 
+- `Reports/tb-platform/snp/` — таблицы VCF для TB Platform: `snp_sites.tsv.gz`,
+  `sample_snp_alleles.tsv.gz`, `vcf_table.tsv.gz` плюс `import_snp.sql`,
+  `snp_db_manifest.tsv` и `samples.txt`. Новые процессы `SNP_DB_SHARDS`
+  (шард на батч) и `SNP_DB_TABLES` (склейка), скрипты
+  `bin/vcf_to_snp_shards.py`, `bin/merge_snp_shards.sh`,
+  `bin/write_import_snp_sql.py`. Отключается флагом `--skip_snp_db`.
+  Точка входа `batch_reports.nf -entry SNP_DB_ONLY` собирает только эти
+  таблицы, при необходимости восстанавливая шарды из `annotate_vcf/`.
 - `Reports/tb-platform/is6110/` — нормализованные таблицы вставок IS6110
   (новый процесс `IS6110_TABLES`, скрипт `bin/build_is6110_tables.py`).
   Раньше вывод ISMapper оставался только в per-sample каталогах.
