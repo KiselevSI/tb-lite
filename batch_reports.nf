@@ -1,6 +1,7 @@
 nextflow.enable.dsl=2
 
 include { REPORTS } from './subworkflows/local/reports'
+include { SNP_DB_FINAL } from './subworkflows/local/snp_db'
 
 workflow BATCH_REPORTS {
     main:
@@ -55,6 +56,17 @@ workflow BATCH_REPORTS {
             del,
             is6110
         )
+
+        if (!params.skip_snp_db) {
+            SNP_DB_FINAL()
+        }
+}
+
+// Только SNP-таблицы, без остальных отчётов. Нужно потому, что BATCH_REPORTS
+// объявляет входные каналы с checkIfExists: true и падает целиком, если в
+// каталоге прогона пуст хотя бы один из его глобов.
+workflow SNP_DB_ONLY {
+    SNP_DB_FINAL()
 }
 
 workflow {

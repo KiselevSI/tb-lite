@@ -177,6 +177,11 @@
                     "default": false,
                     "description": "Skip cohort SNP matrix generation (ANN_TABLE)."
                 },
+                "skip_snp_db": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip SNP table shards for TB Platform (snp_sites / sample_snp_alleles / vcf_table)."
+                },
                 "skip_qc": {
                     "type": "boolean",
                     "default": false,

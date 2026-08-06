@@ -10,6 +10,7 @@ include { KRAKEN }      from '../subworkflows/local/kraken'
 include { ANN_TABLE }   from '../subworkflows/local/ann_table'
 include { REPORTS }     from '../subworkflows/local/reports'
 include { VCF_ANNOTATION } from '../subworkflows/local/vcf_annotation'
+include { SNP_DB }        from '../subworkflows/local/snp_db'
 include { VERSIONS }     from '../subworkflows/local/versions'
 
 workflow TBLITE {
@@ -58,6 +59,11 @@ workflow TBLITE {
         gen = GENOTYPE(filt.trimmed_good, callvar.vcf, filt.bam_good)
         if (!params.skip_snp_matrix) {
             ANN_TABLE(callvar.other_count, maps.ref_fai)
+        }
+
+        // Шарды таблиц TB Platform (snp_sites / sample_snp_alleles / vcf_table).
+        if (!params.skip_snp_db) {
+            SNP_DB(callvar.ann.map { _sample_name, ann_vcf -> ann_vcf })
         }
 
         if (!skip_multiqc || !skip_final_reports) {
