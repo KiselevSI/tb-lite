@@ -153,7 +153,8 @@ process SNP_DB_SHARDS {
 
 Тег шарда:
 
-1. `params.snp_db_tag`, если задан (`run_batches.sh` передаёт номер батча);
+1. `params.batch_tag`, если задан — параметр уже есть в `nextflow.config`, и
+   `run_batches.sh:413` уже передаёт `--batch_tag batch_${i}`, менять его не нужно;
 2. иначе md5 отсортированного списка sample_id.
 
 Оба варианта детерминированы: повторный прогон батча (`--resume-from`) перезаписывает
@@ -289,12 +290,13 @@ bc1286ed-…>` на готовом прогоне без шардов — про
 
 | Файл | Изменение |
 |---|---|
-| `nextflow.config` | `skip_snp_db = false`, `snp_db_tag = null` |
-| `nextflow_schema.json` | описание обоих параметров |
+| `nextflow.config` | `skip_snp_db = false` |
+| `nextflow_schema.json` | описание `skip_snp_db` |
 | `conf/modules.config` | `publishDir` для `SNP_DB_SHARDS` и `SNP_DB_TABLES` |
-| `run_batches.sh` | передача `--snp_db_tag batch_${i}` |
 | `README.md` | раздел про SNP-таблицы и ручной импорт |
 | `CHANGELOG.md` | запись о новых артефактах |
+
+`run_batches.sh` не меняется: `params.batch_tag` уже передаётся.
 
 Пересборка контейнеров не требуется: `SNP_DB_SHARDS` и `SNP_DB_TABLES` работают в уже
 собранном `tb-lite/tb-platform-tables:1.1`, скрипты приезжают из `bin/`.
