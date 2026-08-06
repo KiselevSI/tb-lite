@@ -183,6 +183,17 @@ ERR15166664
 | `spotyping.full.tsv` | То же плюс `MinReads`/`RminReads` и SIT/клада/география из SpolDB4 | справочно |
 | `spoligo_spacer_counts.tsv` | Число ридов на каждый из 43 спейсеров | `general_spoligo_spacers` |
 | `rd.tsv` | Known + novel RD-делеции, 19 колонок (`rd_scan.py`) | `scripts/import_deletions_full.py` |
+| `tbmix.total.tsv` | TB-Mix с частотами линий, без фильтрации по tblg | `tb_mix_lineage` |
+
+Все таблицы в `Reports/tb-platform/` содержат **только образцы, дошедшие до вызова
+вариантов**. Метрики покрытия и TB-Mix считаются до фильтра качества, поэтому
+`general.tsv` и `tbmix.total.tsv` дополнительно отсекаются по списку образцов,
+для которых есть `stats/bcftools/*.bcftools_stats.txt` (`bin/filter_table_by_samples.py`).
+Иначе в базу попали бы образцы с нулевым покрытием — карточки без линии,
+сполиготипа, устойчивости и SNP.
+
+Отбракованные образцы остаются в `Reports/general/FINAL_TABLE.xlsx` и в
+`Reports/general/bad_reads_*.txt` — это QC-отчёты, а не данные для базы.
 
 Процесс `IS6110_TABLES` публикует в `Reports/tb-platform/is6110/` нормализованные
 таблицы вставок IS6110 — каталог целиком принимает

@@ -57,17 +57,31 @@ process TB_PLATFORM_TABLES {
     write_list drugs.list $drugs
     write_list rd.list $rd
 
+    # Образцы, дошедшие до вызова вариантов: BCFTOOLS_STATS в CALLVAR работает
+    # только по bam_good. Метрики покрытия считаются раньше фильтра, поэтому в
+    # general.tsv и tbmix.total.tsv иначе попадают отбракованные образцы — в
+    # базе они дали бы карточки без линии, сполиготипа, устойчивости и SNP.
+    sed 's|.*/||; s|\\.bcftools_stats\\.txt\$||' bcftools_stats.list \\
+        | LC_ALL=C sort -u > passed_samples.txt
+
     python ${projectDir}/bin/build_metrics_table.py \\
         --wgs-list wgs_metrics.list \\
         --bcftools-list bcftools_stats.list \\
         --flagstat-list samtools_flagstat.list \\
-        -o general.tsv \\
+        -o general.unfiltered.tsv \\
         --round
 
-    python ${projectDir}/bin/concat_tables.py --input-list tbmix.list --keep-header -o tbmix.total.tsv
+    python ${projectDir}/bin/filter_table_by_samples.py \\
+        -i general.unfiltered.tsv -s passed_samples.txt --id-column ID -o general.tsv
+
+    python ${projectDir}/bin/concat_tables.py --input-list tbmix.list --keep-header -o tbmix.unfiltered.tsv
+    python ${projectDir}/bin/filter_table_by_samples.py \\
+        -i tbmix.unfiltered.tsv -s passed_samples.txt --id-column Sample -o tbmix.total.tsv
+
     python ${projectDir}/bin/concat_tables.py --input-list spotyping.list --prepend-line "Sample\tSpolBin\tSpol8" -o spotyping.total.tsv
     python ${projectDir}/bin/concat_tables.py --input-list tblg_table.list --keep-header -o tblg.total.tsv
 
+    # filter.tbmix.tsv строится из уже отфильтрованного tbmix.total.tsv.
     python ${projectDir}/bin/filter_tbmix.py -f tbmix.total.tsv -t tblg.total.tsv -o filter.tbmix.tsv
 
     python ${projectDir}/bin/profiler_parser.py --input-list drugs.list -g $gbk --flat-header -o drug_resist.xlsx

@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Таблицы `Reports/tb-platform/general.tsv`, `tbmix.total.tsv` и
+  `filter.tbmix.tsv` теперь содержат только образцы, дошедшие до вызова
+  вариантов. Раньше метрики покрытия и TB-Mix считались до фильтра качества,
+  и отбракованные образцы (нулевое покрытие) попадали в таблицы для базы.
+  Фильтрация — по списку `stats/bcftools/*.bcftools_stats.txt`, скрипт
+  `bin/filter_table_by_samples.py`. QC-отчёты `Reports/general/` по-прежнему
+  показывают все образцы.
 - **BREAKING.** RD-детекция переведена с `bin/rd.py` на `bin/rd_scan.py`. Процесс
   `RD` теперь публикует один `<sample>.rd.tsv` (19 колонок, known + novel) вместо
   пары `novel_rd.tsv` / `known_rd.tsv`. Соответственно `Reports/tb-platform/rd.tsv`
