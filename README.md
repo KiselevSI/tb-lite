@@ -1,82 +1,73 @@
-# TB-Lite: Nextflow-пайплайн для геномного анализа *M. tuberculosis*
+# TB-Lite
 
-## Обзор
+Nextflow DSL2-пайплайн для WGS-анализа *Mycobacterium tuberculosis*: от FASTQ
+(или SRA accession) до лекарственной устойчивости, линий, сполиготипа, RD,
+IS6110, SNP-матрицы и таблиц для TB Platform. Референс — H37Rv.
 
-TB-Lite — это Nextflow DSL2-пайплайн для полного WGS-анализа *Mycobacterium tuberculosis*. Пайплайн принимает либо локальный samplesheet с `FASTQ.gz`, либо список SRA accession ID и выполняет полный цикл анализа: QC, картирование, фильтрацию образцов, вызов вариантов, генотипирование, предсказание лекарственной устойчивости, опциональную таксономическую классификацию Kraken2/Bracken и сборку итоговых отчётов.
+Этот файл — быстрый старт: как запускать и что получится на выходе.
+Как пайплайн устроен внутри, какие инструменты и параметры используются —
+в [DOCUMENTATION.md](DOCUMENTATION.md).
 
-Референс по умолчанию: H37Rv.
+## Содержание
 
-## Ключевые особенности
+- [Требования](#требования)
+- [Быстрый старт](#быстрый-старт)
+- [Входные данные](#входные-данные)
+- [Режимы запуска](#режимы-запуска)
+  - [1. FASTQ](#1-fastq)
+  - [2. SRA](#2-sra)
+  - [3. Kraken2/Bracken](#3-kraken2bracken)
+  - [4. Batch-режим (большие наборы)](#4-batch-режим-большие-наборы)
+  - [5. Сборка отчётов по готовому каталогу](#5-сборка-отчётов-по-готовому-каталогу)
+  - [6. Только аннотация VCF](#6-только-аннотация-vcf)
+  - [7. SNP-матрица из готовых VCF](#7-snp-матрица-из-готовых-vcf)
+- [Профили запуска](#профили-запуска)
+- [Что получается на выходе](#что-получается-на-выходе)
+- [Основные параметры](#основные-параметры)
+- [Перезапуск и частые проблемы](#перезапуск-и-частые-проблемы)
 
-- DSL2-пайплайн на базе nf-core modules и локальных TB-специфичных модулей.
-- Поддержка двух режимов входа: `--input` для локальных FASTQ и `--sra_ids` для SRA.
-- Стандартные runtime-профили: `docker`, `singularity`, `conda`.
-- Опциональный Kraken2/Bracken с одной или двумя базами.
-- Автоматическая фильтрация образцов по `% mapped` и `median coverage`.
-- Итоговый `FINAL_TABLE.xlsx` включает все образцы, дошедшие до `fastp`; для отфильтрованных downstream-поля остаются пустыми.
-- Когортная SNP-матрица для наборов из более чем одного образца.
-- Batch-режим через `run_batches.sh` с финальной агрегацией одного общего `Reports/` и одного общего `multiqc/`.
+## Требования
 
-## Структура проекта
+- Nextflow ≥ 23.04 (проверено на 25.10) и Java 17+.
+- Один из runtime: Docker, Singularity/Apptainer или Conda.
+- Для Docker нужно один раз собрать локальные образы `tb-lite/*` (в публичных
+  реестрах их нет), а после обновления пайплайна пересобрать их:
 
-```text
-tb-lite/
-├── main.nf
-├── batch_reports.nf
-├── nextflow.config
-├── conf/
-│   ├── base.config
-│   └── modules.config
-├── workflows/
-│   └── tblite.nf
-├── subworkflows/
-│   └── local/
-├── modules/
-│   ├── nf-core/
-│   └── local/
-├── lib/
-│   └── WorkflowMain.groovy
-├── bin/
-├── assets/
-│   ├── h37rv.fa
-│   ├── h37rv.gbk
-│   ├── SNPEFF_ANNOTATION/
-│   │   ├── data/
-│   │   └── h37rv_feature_table.txt
-│   ├── multiqc/
-│   ├── rd/
-│   ├── ismap/
-│   ├── chr_name/
-│   └── tbmix/
-├── containers/
-│   ├── dockerfiles/
-│   └── def/
-├── run_batches.sh
-├── build-docker-images.sh
-├── build-containers.sh
-└── make_samplesheet.py
+  ```bash
+  bash build-docker-images.sh
+  ```
+
+  Если образ не собран, Nextflow падает с
+  `pull access denied for tb-lite/...` — см. [частые проблемы](#перезапуск-и-частые-проблемы).
+  Про Singularity и локальные образы см.
+  [DOCUMENTATION.md](DOCUMENTATION.md#13-известные-ограничения).
+
+## Быстрый старт
+
+```bash
+# samplesheet из папки с *.fastq.gz / *.fq.gz
+python make_samplesheet.py -i /data/fastq -o run.csv
+
+nextflow run main.nf -profile docker \
+  --input run.csv \
+  --outdir results \
+  -resume
 ```
 
-`containers/dockerfiles/` и `containers/def/` содержат runtime-описания для локальных модулей. Это не означает, что обычный запуск использует "Docker внутри Apptainer": реальный runtime выбирается профилем Nextflow.
+Главный результат — `results/Reports/general/FINAL_TABLE.xlsx`.
 
 ## Входные данные
 
-### 1. FASTQ samplesheet
+| Режим | Параметр | Формат |
+|---|---|---|
+| FASTQ | `--input` | CSV `sample,fastq_1,fastq_2` |
+| SRA | `--sra_ids` | TXT, один accession на строку |
+| Аннотация VCF | `--vcf_list` | CSV `sample,vcf` |
+| SNP-матрица из VCF | `--vcf_input` | CSV `sample,vcf` |
 
-Параметр: `--input`
-
-CSV-файл с колонками:
-
-| Колонка | Описание |
-|---|---|
-| `sample` | Идентификатор образца |
-| `fastq_1` | Полный путь к `*.fastq.gz` или `*.fq.gz` для R1 или single-end |
-| `fastq_2` | Полный путь к R2, пусто для single-end |
-
-Совместимость со старым форматом `Sample,R1,R2,Layout` сохранена.
-Поддерживаются только gzipped FASTQ: `*.fastq.gz` или `*.fq.gz`.
-
-Пример:
+**FASTQ samplesheet.** Нужны полные пути, только gzip (`*.fastq.gz` или
+`*.fq.gz`). Для single-end колонка `fastq_2` остаётся пустой. Старый формат
+`Sample,R1,R2,Layout` тоже принимается.
 
 ```csv
 sample,fastq_1,fastq_2
@@ -84,152 +75,15 @@ ERR123,/data/ERR123_1.fastq.gz,/data/ERR123_2.fastq.gz
 SRR456,/data/SRR456.fastq.gz,
 ```
 
-### 2. Список SRA accession
-
-Параметр: `--sra_ids`
-
-Текстовый файл с одним accession ID на строку.
-
-Пример:
+**SRA.** Пустые строки и строки с `#` пропускаются, дубликаты убираются.
 
 ```text
 SRR32010433
 ERR15166664
 ```
 
-## Логика пайплайна
-
-### Основной поток
-
-1. `TRIMMING`
-   `fastp` обрезает адаптеры, polyG и низкокачественные хвосты.
-2. `QC`
-   `FastQC` строит отчёты по trimmed reads, если не задан `--skip_qc`.
-3. `MAPPING`
-   `bwa mem` и `Picard MarkDuplicates` строят дедуплицированный BAM.
-4. `FILTER`
-   `TB-Mix`, `Picard CollectWgsMetrics`, `Picard CollectAlignmentSummaryMetrics`, `samtools stats` и `samtools flagstat` оценивают качество образца.
-5. `KRAKEN`
-   Опциональная ветка Kraken2/Bracken запускается на ридах сразу после `fastp`, до sample filtering.
-6. `CALLVAR`
-   Для прошедших фильтр образцов запускаются `Freebayes`, `BCFtools` и `SnpEff`.
-7. `GENOTYPE`
-   Для прошедших фильтр образцов запускаются `SpoTyping`, `ISMapper`, `Mosdepth`, `RD`, `TBLG`, `TB-Profiler`.
-8. `REPORTS`
-   Собираются `MultiQC`, `Reports/general`, `Reports/tb-platform` и, при необходимости, `Reports/snp_matrix`.
-
-### Фильтрация образцов
-
-По умолчанию образец считается "хорошим", если выполняются оба условия:
-
-- `reads_mapped_percent >= 90` (`--min_align_pct`)
-- `median_coverage >= 30` (`--min_median`)
-
-Непрошедшие образцы попадают в `Reports/general/bad_reads_low_coverage.txt` и не идут в downstream-ветки `CALLVAR`, `GENOTYPE` и `ANN_TABLE`.
-
-При этом:
-
-- Kraken, если включён, всё равно считается для них, потому что запускается раньше фильтрации.
-- В `FINAL_TABLE.xlsx` строка для такого образца сохраняется, но downstream-поля будут пустыми.
-
-## Отчёты и как они формируются
-
-### `MultiQC`
-
-`MultiQC` собирается из опубликованных sample-level артефактов:
-
-- `fastp` JSON
-- `FastQC` ZIP
-- `Picard CollectWgsMetrics`
-- `Picard CollectAlignmentSummaryMetrics`
-- `samtools stats`
-- `samtools flagstat`
-- `bcftools stats`
-- Kraken2 reports, если Kraken включён
-
-Важно: `FINAL_TABLE.xlsx` не строится из `MultiQC`. `MultiQC` и финальные табличные отчёты — это параллельные отчётные ветки.
-
-### `FINAL_TABLE.xlsx`
-
-`FINAL_TABLE.xlsx` публикуется в `Reports/general/FINAL_TABLE.xlsx` и собирается напрямую из опубликованных raw/published outputs:
-
-- полный список образцов после `fastp`
-- `general.tsv` из Picard / samtools / bcftools метрик
-- `tbmix.total.tsv`
-- `filter.tbmix.tsv`
-- `spotyping.total.tsv`
-- `tblg.total.tsv`
-- `drug_resist.xlsx`
-- `kraken.top_hits.tsv`, если Kraken включён
-
-Особенности:
-
-- Базой служит список всех образцов после `fastp`.
-- Для образцов, отфильтрованных позже, строки сохраняются.
-- При включённом Kraken добавляются колонки `*_top1..top5` для каждой Kraken DB.
-- В каждой Kraken-ячейке указывается организм и доля из `*_frac`, округлённая до двух знаков.
-
-### `Reports/tb-platform`
-
-Процесс `TB_PLATFORM_TABLES` публикует отдельные файлы в `Reports/tb-platform/`:
-
-| Файл | Содержимое | Импорт в TB Platform |
-| --- | --- | --- |
-| `general.tsv` | Метрики покрытия и выравнивания | `scripts/import_new_core_data.py` |
-| `filter.tbmix.tsv` | TB-Mix + линии после фильтрации | — |
-| `drug_resist.xlsx` | Лекарственная устойчивость | `backend/scripts/import_drug_resist_xlsx.py` |
-| `drug_resist_and_uncertain.xlsx` | То же плюс uncertain-варианты | — |
-| `spotyping.total.tsv` | `Sample`/`SpolBin`/`Spol8` | `general_spoligo` |
-| `spotyping.full.tsv` | То же плюс `MinReads`/`RminReads` и SIT/клада/география из SpolDB4 | справочно |
-| `spoligo_spacer_counts.tsv` | Число ридов на каждый из 43 спейсеров | `general_spoligo_spacers` |
-| `rd.tsv` | Known + novel RD-делеции, 19 колонок (`rd_scan.py`) | `scripts/import_deletions_full.py` |
-| `tbmix.total.tsv` | TB-Mix с частотами линий, без фильтрации по tblg | `tb_mix_lineage` |
-
-Все таблицы в `Reports/tb-platform/` содержат **только образцы, дошедшие до вызова
-вариантов**. Метрики покрытия и TB-Mix считаются до фильтра качества, поэтому
-`general.tsv` и `tbmix.total.tsv` дополнительно отсекаются по списку образцов,
-для которых есть `stats/bcftools/*.bcftools_stats.txt` (`bin/filter_table_by_samples.py`).
-Иначе в базу попали бы образцы с нулевым покрытием — карточки без линии,
-сполиготипа, устойчивости и SNP.
-
-Отбракованные образцы остаются в `Reports/general/FINAL_TABLE.xlsx` и в
-`Reports/general/bad_reads_*.txt` — это QC-отчёты, а не данные для базы.
-
-Процесс `IS6110_TABLES` публикует в `Reports/tb-platform/is6110/` нормализованные
-таблицы вставок IS6110 — каталог целиком принимает
-`backend/scripts/import_is6110_tsv.py --input-dir`:
-
-- `is_element.tsv`, `is6110_site.tsv`, `ismapper_run.tsv`,
-  `sample_is6110_site.tsv`, `is6110_removed_hit.tsv`, `is6110_sample_summary.tsv`
-- диагностика: `import_stats.tsv`, `missing_samples.tsv`, `duplicate_runs.tsv`,
-  `is6110_import_warnings.tsv`
-
-ISMapper запускается только по paired-образцам, поэтому для набора целиком из
-single-end данных таблицы публикуются пустыми (только шапки).
-
-### `Reports/snp_matrix`
-
-Когортная матрица строится, если в наборе больше одного образца и не задан `--skip_snp_matrix`.
-
-Основной финальный файл:
-
-- `Reports/snp_matrix/FINAL_ANNOTATION_TABLE.tsv`
-
-Также публикуются промежуточные cohort-level VCF/annotation файлы.
-
-### VCF annotation-only
-
-Если уже есть per-sample VCF и нужно только получить SnpEff-annotated VCF без полного WGS-запуска:
-
-```bash
-nextflow run . \
-  -profile docker \
-  --vcf_annotation_only \
-  --vcf_list vcf_samples.csv \
-  --outdir results_vcf_annotation
-```
-
-Формат `vcf_samples.csv`:
+**VCF-список.** В каждом VCF должна быть ровно одна sample-колонка. Имя
+образца — только буквы, цифры, `.`, `_`, `-`.
 
 ```csv
 sample,vcf
@@ -237,416 +91,251 @@ sample1,/data/sample1.vcf
 sample2,/data/sample2.vcf.gz
 ```
 
-Каждый входной VCF должен содержать ровно один sample column. Пайплайн переименует sample column в значение из колонки `sample` и опубликует результат в `annotate_vcf/<sample>/`.
+## Режимы запуска
 
-### Standalone SNP matrix из VCF
-
-Если уже есть per-sample VCF, SNP-матрицу можно построить отдельным entrypoint без полного WGS-запуска:
+### 1. FASTQ
 
 ```bash
-nextflow run snp_matrix.nf \
-  -profile docker \
-  --vcf_input vcf_samples.csv \
-  --outdir results_snp_matrix
-```
-
-Минимальный вход — обычный однообразцовый VCF (`.vcf` или `.vcf.gz`) для каждого образца. Per-sample annotated VCF не требуется: workflow сначала объединяет VCF в cohort VCF, затем запускает SnpEff и строит `FINAL_ANNOTATION_TABLE.tsv`.
-
-Формат `vcf_samples.csv`:
-
-```csv
-sample,vcf
-sample1,/data/sample1.vcf
-sample2,/data/sample2.vcf.gz
-```
-
-CSV можно создать из директории с VCF:
-
-```bash
-python make_snp_matrix_csv.py -i /data/vcf -o vcf_samples.csv
-```
-
-Можно передать несколько директорий:
-
-```bash
-python make_snp_matrix_csv.py \
-  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
-  -o vcf_samples.csv
-```
-
-По умолчанию sample ID читается из VCF header. Для больших наборов это надежно, но медленно, потому что надо открыть каждый VCF. Если sample ID можно брать из имени файла, используйте быстрый режим:
-
-```bash
-python make_snp_matrix_csv.py \
-  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
-  -o vcf_samples.csv \
-  --sample-source filename
-```
-
-Для `--sample-source filename` параметр `--jobs` распараллеливает обход входных директорий и запись временных shard-файлов. Прогресс поиска и обработки печатается в stderr:
-
-```bash
-python make_snp_matrix_csv.py \
-  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
-  -o vcf_samples.csv \
-  --sample-source filename \
-  --jobs 16
-```
-
-Если нужен именно sample ID из header, включите параллельное чтение:
-
-```bash
-python make_snp_matrix_csv.py \
-  -i ../VCF/ /data6/bio/MolGenMicro/TBGenoPipe/results/VCF2/VCF \
-  -o vcf_samples.csv \
-  --sample-source header \
-  --jobs 16
-```
-
-## Выходные данные
-
-### Итоговые отчёты
-
-| Путь | Назначение |
-|---|---|
-| `Reports/general/FINAL_TABLE.xlsx` | Главный итоговый Excel-отчёт |
-| `Reports/general/drug_resist.xlsx` | Drug-resistance таблица из `profiler_parser.py` |
-| `Reports/general/bad_reads_low_coverage.txt` | Непрошедшие фильтр образцы |
-| `Reports/tb-platform/` | Отдельные платформенные TSV/XLSX-таблицы |
-| `Reports/snp_matrix/FINAL_ANNOTATION_TABLE.tsv` | Когортная SNP-матрица |
-| `multiqc/multiqc_report.html` | Итоговый HTML-отчёт MultiQC |
-
-### Sample-level published outputs
-
-Эти директории важны не только для отладки, но и для batch aggregation:
-
-| Путь | Назначение |
-|---|---|
-| `fastp/<sample>/` | `fastp` JSON/HTML |
-| `fastqc/<sample>/` | FastQC ZIP/HTML |
-| `mapped/<sample>/` | BAM и BAM index после дедупликации |
-| `stats/picard/wgs/<sample>/` | `CollectWgsMetrics.coverage_metrics` |
-| `stats/picard/alignment/<sample>/` | `CollectAlignmentSummaryMetrics` |
-| `stats/samtools/stats/<sample>/` | `samtools stats` |
-| `stats/samtools/flagstat/<sample>/` | `samtools flagstat` |
-| `stats/bcftools/` | `*.bcftools_stats.txt` |
-| `stats/mosdepth/<sample>/` | Mosdepth outputs |
-| `vcf/<sample>/` | filtered VCF |
-| `annotate_vcf/<sample>/` | SnpEff-annotated VCF |
-| `tb-mix/` | результаты TB-Mix |
-| `spotyping/<sample>/` | результаты SpoTyping |
-| `lineage/` | lineage-таблицы TBLG |
-| `rd/<sample>/` | RD tables |
-| `tb-profiler/drug-resist/<sample>/results/` | `*.results.json` и другие outputs TB-Profiler |
-| `is6110/paired/<sample>/` | ISMapper outputs |
-| `kraken2/kraken2/<db_label>/<sample>/` | Kraken2 per-sample outputs |
-| `kraken2/bracken/<db_label>/<sample>/` | Bracken per-sample outputs |
-| `kraken2/combined/` | combined all-sample tables по каждой Kraken DB |
-
-## Runtime-профили
-
-TB-Lite поддерживает три стандартных профиля:
-
-- `docker`
-- `singularity`
-- `conda`
-
-Если профиль не указан, в текущем `nextflow.config` Docker runtime остаётся включён по умолчанию. Для воспроизводимых запусков лучше указывать профиль явно.
-
-### Рекомендации
-
-- `-profile docker`
-  Обычный серверный запуск с Docker.
-- `-profile singularity`
-  HPC и кластеры с Apptainer/Singularity.
-- `-profile conda`
-  Системы, где проще управлять инструментами через Conda environments.
-
-Важно: текущая архитектура не описывается как "Docker-контейнер, внутри которого Apptainer запускает `.sif`". Nextflow использует выбранный runtime напрямую:
-
-- в `docker` профиле — Docker containers
-- в `singularity` профиле — Singularity/Apptainer containers
-- в `conda` профиле — `environment.yml` у модулей
-
-Каталог `containers/` нужен для локальных кастомных модулей и сборки соответствующих runtime-образов, а не как обязательный слой вложенной контейнеризации.
-
-## Конфигурация
-
-### Основные параметры
-
-| Параметр | Значение по умолчанию | Назначение |
-|---|---|---|
-| `--input` | `null` | CSV samplesheet для локальных FASTQ |
-| `--sra_ids` | `null` | Текстовый файл со списком SRA accession |
-| `--outdir` | `./results2` | Корневая директория результатов |
-| `--reference` | `assets/h37rv.fa` | Референсный FASTA |
-| `--gbk` | `assets/h37rv.gbk` | GenBank-файл H37Rv |
-| `--snpeff_db` | `h37rv_custom` | Имя базы SnpEff |
-| `--snpeff_data_dir` | `assets/SNPEFF_ANNOTATION/data` | Каталог данных SnpEff |
-| `--multiqc_config` | `assets/multiqc/multiqc_config.yaml` | Конфиг MultiQC |
-| `--mode` | `copy` | `publishDir` mode |
-| `--min_align_pct` | `90` | Минимальный процент выравненных ридов |
-| `--min_median` | `30` | Минимальное медианное покрытие |
-| `--skip_qc` | `false` | Не запускать FastQC |
-| `--skip_kraken` | `false` | Не запускать Kraken/Bracken |
-| `--skip_multiqc` | `false` | Не строить MultiQC |
-| `--skip_final_reports` | `false` | Не строить `Reports/general` и `Reports/tb-platform` |
-| `--skip_snp_matrix` | `false` | Не строить cohort SNP matrix |
-
-### Kraken2 / Bracken
-
-Поддерживаются одна или две Kraken DB:
-
-| Параметр | Назначение |
-|---|---|
-| `--kraken2_db` | Первая Kraken2 DB |
-| `--kraken2_db_label` | Метка первой DB |
-| `--kraken2_db_2` | Вторая Kraken2 DB |
-| `--kraken2_db_label_2` | Метка второй DB |
-
-Если label не задан, он выводится автоматически из имени каталога базы.
-
-### Ресурсы по label
-
-Определены в `conf/base.config`:
-
-| Label | CPU | Memory | `maxForks` |
-|---|---|---|---|
-| `process_single` | 1 | 4 GB | 12 |
-| `process_low` | 2 | 6 GB | 12 |
-| `process_medium` | 6 | 8 GB | 6 |
-| `process_high` | 6 | 8 GB | 2 |
-
-## Примеры запуска
-
-### FASTQ + Docker
-
-```bash
-python make_samplesheet.py -i data -o run.csv
-
-nextflow run main.nf \
-  -profile docker \
+nextflow run main.nf -profile docker \
   --input run.csv \
   --outdir results \
   -resume
 ```
 
-### FASTQ + Conda
+Полный анализ: тримминг → QC → картирование → фильтр по покрытию →
+варианты → генотипирование → отчёты. Если в наборе больше одного образца,
+строится ещё и когортная SNP-матрица.
+
+### 2. SRA
 
 ```bash
-nextflow run main.nf \
-  -profile conda \
-  --input run.csv \
-  --outdir results \
-  -resume
-```
-
-### SRA
-
-```bash
-printf "SRR32010433\nERR15166664\n" > sra_ids.txt
-
-nextflow run main.nf \
-  -profile docker \
+nextflow run main.nf -profile docker \
   --sra_ids sra_ids.txt \
   --outdir results \
   -resume
 ```
 
-### Kraken с одной базой
+То же, что режим FASTQ, но риды сначала скачиваются из SRA
+(`prefetch` + `fasterq-dump`). Accession, у которых после скачивания не 1 и не 2
+FASTQ-файла, пропускаются и попадают в `Reports/general/unsupported_sra_layout.txt`.
+
+### 3. Kraken2/Bracken
+
+По умолчанию Kraken не запускается: он включается, если указать `--kraken2_db`.
+Баз может быть одна или две.
 
 ```bash
-nextflow run main.nf \
-  -profile docker \
+nextflow run main.nf -profile docker \
   --input run.csv \
-  --kraken2_db /path/to/kraken_db \
-  --kraken2_db_label ALL \
+  --kraken2_db   /db/kraken_standard --kraken2_db_label   ALL \
+  --kraken2_db_2 /db/kraken_myco     --kraken2_db_label_2 ONLY_MYCOBACTERIUM \
   --outdir results \
   -resume
 ```
 
-### Kraken с двумя базами
+Если метка не задана, она берётся из имени каталога базы. Метки двух баз
+не должны совпадать.
 
-```bash
-nextflow run main.nf \
-  -profile docker \
-  --input run.csv \
-  --kraken2_db /path/to/db1 \
-  --kraken2_db_label ALL \
-  --kraken2_db_2 /path/to/db2 \
-  --kraken2_db_label_2 ONLY_MYCOBACTERIUM \
-  --outdir results \
-  -resume
-```
+### 4. Batch-режим (большие наборы)
 
-### Singularity / Apptainer
-
-```bash
-nextflow run main.nf \
-  -profile singularity \
-  --input run.csv \
-  --outdir results \
-  -resume
-```
-
-### Kubernetes
-
-```bash
-nextflow run main.nf \
-  -profile docker \
-  -c k8s.config \
-  --input run.csv \
-  --outdir results \
-  -resume
-```
-
-## Batch-режим
-
-Для длинных запусков по большим samplesheet используйте `run_batches.sh`.
-
-Пример:
+Для сотен и тысяч образцов. `run_batches.sh` делит вход на батчи, прогоняет
+их по очереди в один общий `outdir`, после каждого успешного батча чистит
+`work/` и в конце собирает общие отчёты.
 
 ```bash
 ./run_batches.sh \
   --pipeline /home/zerg/git/tb-lite \
   --input /data/run.csv \
   --batch-size 500 \
-  --profile conda \
-  --outdir /data/results_batches
+  --profile docker \
+  --outdir /data/results_batches \
+  --workdir /data/work_batches
 ```
 
-### Что делает batch-режим
+| Опция | По умолчанию | Назначение |
+|---|---|---|
+| `--pipeline` | — (обязательна) | Каталог с `main.nf` |
+| `--input` | — (обязательна) | Samplesheet CSV или список SRA |
+| `--input-mode` | `auto` | `fastq`/`sra`; `auto`: если в первой строке есть запятая — FASTQ |
+| `--batch-size` | `500` | Образцов в батче |
+| `--profile` | **`conda`** | `docker`, `singularity`, `conda`, `local` |
+| `--outdir` | `./results` | Общий каталог результатов |
+| `--workdir` | `./work` | Work-каталог Nextflow (**очищается после каждого батча**) |
+| `--resume-from N` | `1` | Продолжить с батча N |
+| `--with-kraken`, `--kraken2_db*` | выкл. | Kraken, как в режиме 3 |
+| `--benchmark` | выкл. | Трассировка Nextflow и сводка производительности в `<outdir>/benchmark/` |
 
-1. Делит входной файл на батчи.
-2. Каждый батч запускает `main.nf` с:
-   - `--skip_final_reports`
-   - `--skip_multiqc`
-   - `--skip_snp_matrix`
-3. Все sample-level outputs складываются в один общий `outdir`.
-4. После последнего успешного батча запускается `batch_reports.nf`, который собирает:
-   - один общий `Reports/` (включая `Reports/tb-platform/snp/`)
-   - один общий `multiqc/`
+Разбивка сохраняется в `./.batches/`, журнал батчей — в `./batches.log`
+(оба в текущем каталоге). Если батч упал, скрипт печатает готовую команду
+с `--resume-from` для продолжения, а `work/` не трогает.
 
-### Только SNP-таблицы для готового прогона
+> Не используйте `--mode link`/`symlink` в batch-режиме: `work/` удаляется
+> после каждого батча, и ссылки в `outdir` станут битыми.
 
-Если каталог с результатами уже есть, а SNP-таблиц в нём нет, их можно
-собрать отдельно — без остальных отчётов:
+С `--benchmark` для каждого батча сохраняются `trace.tsv`, `report.html` и
+`timeline.html` Nextflow, а в конце считается сводка: образцов в час/сутки,
+CPU-часы и пиковая память на образец, время по процессам, конфигурация
+машины. Главный файл — `<outdir>/benchmark/summary.md`. Подробности — в
+[DOCUMENTATION.md](DOCUMENTATION.md#бенчмарк---benchmark).
+
+### 5. Сборка отчётов по готовому каталогу
+
+`batch_reports.nf` не запускает анализ, а собирает отчёты из того, что уже
+лежит в `outdir`. `run_batches.sh` вызывает его сам. Вручную он нужен, чтобы
+пересобрать отчёты или получить SNP-таблицы для TB Platform после обычного
+запуска.
 
 ```bash
-nextflow run batch_reports.nf -entry SNP_DB_ONLY \
-  -profile docker \
-  --outdir /data/results_batches
+# Все отчёты + SNP-таблицы
+nextflow run batch_reports.nf -profile docker --outdir /data/results_batches
+
+# Только SNP-таблицы для TB Platform
+nextflow run batch_reports.nf -entry SNP_DB_ONLY -profile docker --outdir /data/results
 ```
 
-Если `snp_db/shards/` пуст, шарды соберутся из `annotate_vcf/` пачками по 500.
-Отдельная точка входа нужна потому, что полный `batch_reports.nf` объявляет
-входные каналы с `checkIfExists: true` и падает целиком, если в каталоге
-прогона пуст хотя бы один из его глобов.
+Полная сборка падает, если в `outdir` нет хотя бы одного из ожидаемых типов
+файлов (например, `fastqc/` при запуске с `--skip_qc`). В таком случае
+используйте `-entry SNP_DB_ONLY`. Для Kraken передайте те же `--kraken2_db*`,
+иначе добавьте `--skip_kraken`.
 
-### Batch + Kraken
+### 6. Только аннотация VCF
+
+SnpEff-аннотация готовых per-sample VCF без WGS-анализа:
 
 ```bash
-./run_batches.sh \
-  --pipeline /home/zerg/git/tb-lite \
-  --input /data/run.csv \
-  --batch-size 500 \
-  --profile conda \
-  --with-kraken \
-  --kraken2_db /data/kraken_db \
-  --kraken2_db_label ALL \
-  --kraken2_db_2 /data/myco_db \
-  --kraken2_db_label_2 ONLY_MYCOBACTERIUM \
-  --outdir /data/results_batches
+nextflow run main.nf -profile docker \
+  --vcf_annotation_only \
+  --vcf_list vcf_samples.csv \
+  --outdir results_vcf_annotation
 ```
 
-По умолчанию `run_batches.sh` использует профиль `conda`.
+`--input`/`--sra_ids` в этом режиме не задаются.
 
-## SNP-таблицы для TB Platform
+### 7. SNP-матрица из готовых VCF
 
-Пайплайн генерирует файлы, которыми образцы добавляются на сайт. Итог —
-в `<outdir>/Reports/tb-platform/snp/`:
+Когортная SNP-матрица из готовых VCF (аннотировать их заранее не нужно):
 
-| Файл | Назначение |
+```bash
+nextflow run snp_matrix.nf -profile docker \
+  --vcf_input vcf_samples.csv \
+  --outdir results_snp_matrix
+```
+
+CSV можно собрать из каталогов с VCF:
+
+```bash
+# sample ID из имени файла — быстро
+python make_snp_matrix_csv.py -i /data/vcf1 /data/vcf2 -o vcf_samples.csv \
+  --sample-source filename --jobs 16
+
+# sample ID из заголовка VCF — надёжнее, но открывает каждый файл
+python make_snp_matrix_csv.py -i /data/vcf -o vcf_samples.csv \
+  --sample-source header --jobs 16
+```
+
+В матрицу не попадают образцы с 5000 и более вариантами (обычно это
+контаминация или не MTBC). Если после этого осталось меньше двух образцов,
+матрица не строится.
+
+## Профили запуска
+
+| Профиль | Когда |
 |---|---|
-| `snp_sites.tsv.gz` | каталог аннотированных сайтов; `site_id` выдаёт БД по `site_key` |
-| `sample_snp_alleles.tsv.gz` | аллели образцов — SNP matrix TSV и поиск по SNP |
-| `vcf_table.tsv.gz` | плоская таблица `sample_id/pos/alt` — поиск и clade-признаки |
-| `import_snp.sql` | psql-скрипт загрузки |
-| `snp_db_manifest.tsv` | счётчики строк для сверки |
-| `samples.txt` | список загружаемых образцов |
+| `-profile docker` | Обычный сервер с Docker |
+| `-profile singularity` | HPC/кластер с Apptainer/Singularity |
+| `-profile conda` | Нет контейнеров; окружения из `environment.yml` модулей |
+| `-profile docker -c k8s.config` | Kubernetes (executor `k8s`) |
 
-Источник — per-sample `annotate_vcf/<sample>/<sample>.annotated.ann.vcf` после snpEff.
-Пишется **всё содержимое VCF**: SNP, инделы, complex и mnp, без фильтров и без масок.
+Без `-profile` используется Docker, но лучше указывать профиль явно.
 
-`site_key` — sha1 от `chrom, pos, ref, alt` и полей ANN. Формула совпадает
-с продовой таблицей `snp_sites`, поэтому новые данные схлопываются
-с существующими через `ON CONFLICT (site_key)`.
+## Что получается на выходе
 
-Отключается флагом `--skip_snp_db`.
+### Режимы 1–3 (FASTQ, SRA, Kraken)
 
-### Как это работает в batch-режиме
+| Путь | Что это |
+|---|---|
+| `Reports/general/FINAL_TABLE.xlsx` | **Главная сводная таблица**: все образцы после fastp, QC-метрики, TB-Mix, линия, сполиготип, устойчивость, Kraken top-5 |
+| `Reports/general/drug_resist.xlsx` | Лекарственная устойчивость (TB-Profiler) |
+| `Reports/general/bad_reads_low_coverage.txt` | Отбракованные по % картирования / медиане покрытия |
+| `Reports/general/bad_reads_invalid_fastq.txt` | Отбракованные из-за пустых или битых FASTQ |
+| `Reports/general/unsupported_sra_layout.txt` | Только SRA: accession с неподдерживаемым layout |
+| `Reports/tb-platform/` | Таблицы для загрузки в TB Platform (только прошедшие фильтр образцы) |
+| `Reports/tb-platform/is6110/` | Нормализованные таблицы вставок IS6110 |
+| `Reports/snp_matrix/FINAL_ANNOTATION_TABLE.tsv` | Когортная SNP-матрица (если образцов ≥ 2) |
+| `multiqc/TB-Lite-QC_multiqc_report.html` | Сводный QC-отчёт MultiQC |
+| `versions.txt` | Версии всех использованных программ |
+| `snp_db/shards/` | Заготовки SNP-таблиц TB Platform; готовые таблицы — через режим 5 |
 
-1. Каждый батч `main.nf` пишет свои шарды в `<outdir>/snp_db/shards/`
-   (одна задача на батч, тег из `--batch_tag`, который `run_batches.sh`
-   уже передаёт). Перезапуск батча перезаписывает те же файлы, дублей не будет.
-2. Финальный `batch_reports.nf` склеивает все шарды в три таблицы,
-   дедуплицируя `snp_sites` по `site_key` с максимальным `QUAL`.
+Кроме того, в `outdir` лежат результаты по каждому образцу: `fastp/`,
+`fastqc/`, `stats/`, `vcf/`, `annotate_vcf/`, `tb-mix/`, `lineage/`,
+`spotyping/`, `rd/`, `tb-profiler/`, `is6110/`, `kraken2/` (если включён Kraken).
+Полный список — в [DOCUMENTATION.md](DOCUMENTATION.md#11-выходные-каталоги).
+BAM-файлы не сохраняются.
 
-`run_batches.sh` менять не нужно: `--batch_tag batch_${i}` он уже передаёт,
-а финальный `batch_reports.nf` подхватывает готовые шарды.
+### Режим 4 (batch)
 
-Не запускайте batch-режим с `--mode link` или `--mode symlink`: `run_batches.sh`
-чистит `work/` после каждого батча, и шарды-симлинки станут битыми. По умолчанию
-`mode = copy`, этого и держитесь.
+Каталоги по образцам — те же, что в режимах 1–3, но общие для всех батчей.
+После последнего батча собираются:
 
-### Проверка полноты
+| Путь | Что это |
+|---|---|
+| `Reports/general/`, `Reports/tb-platform/` | Общие отчёты по всем батчам |
+| `Reports/tb-platform/snp/` | Готовые SNP-таблицы и `import_snp.sql` для TB Platform |
+| `Reports/general/bad_reads_*.txt` | Объединённые списки отбракованных |
+| `batch_reports/filter/` | Те же списки отбракованных по каждому батчу |
+| `benchmark/` | Только с `--benchmark`: trace/report/timeline по батчам и сводка производительности |
 
-Перед импортом сверьте, сколько образцов реально попало в таблицы:
+В batch-режиме **не строятся** MultiQC и когортная SNP-матрица. Матрицу
+при необходимости строят отдельно (режим 7) по `vcf/`.
 
-```bash
-wc -l <outdir>/Reports/tb-platform/snp/samples.txt
-cat   <outdir>/Reports/tb-platform/snp/snp_db_manifest.tsv
-```
+### Режим 5 (`batch_reports.nf`)
 
-`samples` в манифесте должно совпасть с числом образцов, дошедших до
-вызова вариантов (часть отсеивается фильтрами покрытия — см.
-`Reports/general/bad_reads_low_coverage.txt`). Если батч перезапускался
-с другим составом образцов, его шард перезаписывается новым составом —
-именно поэтому итог стоит сверять по `samples.txt`, а не по числу батчей.
+Всё из `Reports/` как в batch-режиме. С `-entry SNP_DB_ONLY` — только
+`Reports/tb-platform/snp/`.
 
-Если прогон уже отработал без шардов, их можно собрать задним числом
-из `annotate_vcf/` — см. `-entry SNP_DB_ONLY` ниже.
+### Режим 6 (аннотация VCF)
 
-### Импорт в базу
+| Путь | Что это |
+|---|---|
+| `annotate_vcf/<sample>/<sample>.annotated.ann.vcf` | VCF с SnpEff-аннотацией, sample-колонка переименована по CSV |
+| `annotate_vcf/<sample>/snpEff_summary.html` и др. | Отчёты SnpEff |
+| `versions.txt` | Версии программ |
 
-Порядок важен: `general.tsv` должен быть импортирован раньше — на
-`sample_snp_alleles.sample_id` висит внешний ключ на `general."ID"`.
+### Режим 7 (SNP-матрица)
 
-```bash
-psql "$DATABASE_URL" -f <outdir>/Reports/tb-platform/snp/import_snp.sql
-```
+| Путь | Что это |
+|---|---|
+| `Reports/snp_matrix/FINAL_ANNOTATION_TABLE.tsv` | SNP-матрица с аннотацией |
+| `Reports/snp_matrix/cohort.*` | Промежуточные когортные VCF |
 
-`\copy` выполняется на стороне клиента, поэтому каталог с `.tsv.gz` должен быть
-виден тому процессу, который запускает psql. Если psql запускается в контейнере,
-каталог надо смонтировать и перегенерировать SQL с путём внутри контейнера:
+Как загрузить результаты в базу TB Platform, описано в
+[DOCUMENTATION.md](DOCUMENTATION.md#7-загрузка-в-tb-platform).
 
-```bash
-python bin/write_import_snp_sql.py --data-dir /mnt/snp -o import_snp.sql
-```
+## Основные параметры
 
-Повторный запуск импорта безопасен: `snp_sites` схлопывается по `site_key`,
-`sample_snp_alleles` — по первичному ключу, `vcf_table` перезаписывается по
-списку входящих образцов, профили обновляются.
+| Параметр | По умолчанию | Назначение |
+|---|---|---|
+| `--outdir` | `./results2` | Каталог результатов |
+| `--min_align_pct` | `90` | Минимальный % картированных ридов |
+| `--min_median` | `30` | Минимальная медиана покрытия |
+| `--mode` | `copy` | Как публиковать файлы (`copy`, `link`, `symlink`) |
+| `--skip_qc` | `false` | Без FastQC |
+| `--skip_kraken` | `false` | Без Kraken, даже если задана база |
+| `--skip_multiqc` | `false` | Без MultiQC |
+| `--skip_final_reports` | `false` | Без `Reports/general` и `Reports/tb-platform` |
+| `--skip_snp_matrix` | `false` | Без когортной SNP-матрицы |
+| `--skip_snp_db` | `false` | Без SNP-таблиц TB Platform |
 
-Последним шагом тот же SQL достраивает `sample_snp_profiles` по маскам из
-`snp_masks` / `snp_mask_regions`. Если таблица масок пуста, шаг пропускается
-с предупреждением — маски заливаются отдельно
-(`tb-platform/deploy/rebuild_snp_profiles_masked.sql`).
+Полный список (референс, SnpEff, базы, ресурсы) — в
+[DOCUMENTATION.md](DOCUMENTATION.md#9-параметры). Справка: `nextflow run main.nf --help`.
 
-## Примечания
+## Перезапуск и частые проблемы
 
-- Для `SnpEff` пайплайн ожидает каталог данных в `assets/SNPEFF_ANNOTATION/data`.
-- Для custom базы по умолчанию используется `--snpeff_db h37rv_custom`.
-- `ISMapper` работает только с paired-end reads.
-- Параметр `--samples` сохранён как устаревший алиас к `--input`.
-- Параметр `--multiqc` сохранён как устаревший алиас к `--multiqc_config`.
+- **Перезапуск после падения** — та же команда с `-resume`: готовые задачи
+  возьмутся из кэша. В batch-режиме — `--resume-from N`.
+- **`pull access denied for tb-lite/<имя>`** — на машине нет локального
+  образа нужной версии. Соберите его: `bash build-docker-images.sh`.
+- **Образца нет в отчётах** — проверьте `Reports/general/bad_reads_*.txt`.
+  Отбракованные образцы остаются в `FINAL_TABLE.xlsx` с пустыми полями
+  после фильтра, но в `Reports/tb-platform/` не попадают.
+- **ISMapper/IS6110 пустые** — ISMapper работает только с paired-end ридами.
