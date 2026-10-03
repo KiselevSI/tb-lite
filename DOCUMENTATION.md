@@ -295,6 +295,7 @@ stats/flagstat, bcftools stats, отчёты Kraken2. Конфиг —
 |---|---|---|
 | `general.tsv` | Метрики покрытия и выравнивания | `scripts/import_new_core_data.py` |
 | `tbmix.total.tsv` | TB-Mix с частотами линий | `tb_mix_lineage` |
+| `tblg.total.tsv` | Линия/сублиния по TBLG (`level_1`…`level_5`), сводка `lineage/*.lg.tsv` | — |
 | `filter.tbmix.tsv` | TB-Mix, отфильтрованный по TBLG | — |
 | `drug_resist.xlsx` | Устойчивость, одноуровневый заголовок | `backend/scripts/import_drug_resist_xlsx.py` |
 | `drug_resist_and_uncertain.xlsx` | То же + uncertain-варианты | — |
