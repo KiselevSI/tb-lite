@@ -21,6 +21,8 @@ KRAKEN2_DB=""
 KRAKEN2_DB_LABEL=""
 KRAKEN2_DB_2=""
 KRAKEN2_DB_LABEL_2=""
+BENCHMARK=0
+ORIG_ARGS=("$@")
 
 usage() {
     cat <<EOF
@@ -41,6 +43,8 @@ usage() {
   --kraken2_db_label    Лейбл первой Kraken2 БД
   --kraken2_db_2        Путь ко второй Kraken2 БД
   --kraken2_db_label_2  Лейбл второй Kraken2 БД
+  --benchmark    Сохранить трассировку Nextflow и метрики производительности
+                 в <outdir>/benchmark/ (время, CPU, память, образцов в час)
   --help         Показать справку
 
 Примеры:
@@ -51,6 +55,8 @@ usage() {
 Особенности batch-режима:
   - каждый батч запускается с --skip_final_reports --skip_multiqc --skip_snp_matrix
   - после последнего батча автоматически собирается один общий Reports/
+  - с --benchmark для каждого батча пишутся trace/report/timeline Nextflow,
+    а в конце — сводка bin/benchmark_summary.py (summary.md, per_*.tsv)
 EOF
     exit 0
 }
@@ -71,6 +77,7 @@ while [[ $# -gt 0 ]]; do
         --kraken2_db_label) KRAKEN2_DB_LABEL="$2"; shift 2 ;;
         --kraken2_db_2) KRAKEN2_DB_2="$2"; shift 2 ;;
         --kraken2_db_label_2) KRAKEN2_DB_LABEL_2="$2"; shift 2 ;;
+        --benchmark)   BENCHMARK=1;      shift ;;
         --help)        usage ;;
         *) echo "Неизвестный аргумент: $1"; usage ;;
     esac
@@ -180,6 +187,7 @@ mkdir -p "$BATCH_DIR"
 mkdir -p "$OUTDIR"
 mkdir -p "$WORKDIR"
 mkdir -p "${OUTDIR}/batch_reports/filter"
+BENCH_DIR="${OUTDIR}/benchmark"
 
 count_existing_batches() {
     local max_batch=0
@@ -312,7 +320,115 @@ if (( WITH_KRAKEN )); then
 else
     echo "Kraken:        disabled"
 fi
+if (( BENCHMARK )); then
+    echo "Benchmark:     $BENCH_DIR"
+fi
 echo "============================================"
+
+# --- Бенчмарк ---
+# Одна строка "ключ<TAB>значение"; табы и переводы строк в значении схлопываются.
+env_row() {
+    local key="$1"
+    shift
+    local value
+    value="$("$@" 2>/dev/null | tr '\t\n' '  ' | sed 's/  */ /g; s/^ //; s/ $//' || true)"
+    printf '%s\t%s\n' "$key" "${value:-NA}"
+}
+
+write_benchmark_environment() {
+    local env_file="${BENCH_DIR}/environment.tsv"
+    local engine_cmd=(true)
+
+    case "$PROFILE" in
+        docker)      engine_cmd=(docker --version) ;;
+        singularity) engine_cmd=(singularity --version) ;;
+        conda)       engine_cmd=(conda --version) ;;
+    esac
+
+    {
+        printf 'key\tvalue\n'
+        env_row date              date '+%Y-%m-%d %H:%M:%S %z'
+        env_row hostname          hostname
+        env_row os                sh -c '. /etc/os-release && echo "$PRETTY_NAME"'
+        env_row kernel            uname -r
+        env_row cpu_model         sh -c "lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1"
+        env_row cpu_sockets       sh -c "lscpu | sed -n 's/^Socket(s):[[:space:]]*//p'"
+        env_row cpu_logical       nproc
+        env_row mem_total_gb      env LC_ALL=C awk '/^MemTotal:/ { printf "%.1f", $2 / 1024 / 1024 }' /proc/meminfo
+        env_row workdir_fs        sh -c "df -hT '$WORKDIR' | tail -1"
+        env_row outdir_fs         sh -c "df -hT '$OUTDIR' | tail -1"
+        env_row block_devices     sh -c "lsblk -d -n -o NAME,ROTA,SIZE,MODEL | sed 's/\$/;/'"
+        env_row nextflow_version  sh -c "nextflow -version | sed -n 's/.*version \\([0-9][^ ]*\\).*/\\1/p'"
+        env_row container_engine  "${engine_cmd[@]}"
+        env_row pipeline_commit   git -C "$PIPELINE_DIR" rev-parse HEAD
+        env_row pipeline_dirty    sh -c "git -C '$PIPELINE_DIR' status --porcelain --untracked-files=no | wc -l"
+        env_row executor_cpus     sh -c "nextflow config -flat '$PIPELINE_DIR' | sed -n \"s/^executor.cpus = //p\""
+        env_row profile           echo "$PROFILE"
+        env_row input_mode        echo "$INPUT_MODE"
+        env_row batch_size        echo "$BATCH_SIZE"
+        env_row total_samples     echo "$TOTAL_SAMPLES"
+        env_row total_batches     echo "$TOTAL_BATCHES"
+        env_row kraken            echo "$WITH_KRAKEN"
+        env_row command           echo "$0 ${ORIG_ARGS[*]}"
+    } > "$env_file"
+    echo "  Окружение для бенчмарка: ${env_file}"
+}
+
+# Добавляет в массив NF_CMD (по имени) флаги трассировки для запуска <label>.
+# Трассировка прошлой попытки того же запуска (после падения) переносится в
+# attempts/, чтобы benchmark_summary.py мог взять метрики задач, которые при
+# -resume придут как CACHED.
+add_benchmark_flags() {
+    local -n cmd_ref="$1"
+    local label="$2"
+    local run_dir="${BENCH_DIR}/${label}"
+
+    if [[ -f "${run_dir}/trace.tsv" ]]; then
+        mkdir -p "${BENCH_DIR}/attempts"
+        mv "$run_dir" "${BENCH_DIR}/attempts/${label}.$(date +%s)"
+    fi
+    mkdir -p "$run_dir"
+
+    cmd_ref+=(
+        -c "${PIPELINE_DIR}/conf/benchmark.config"
+        -with-trace "${run_dir}/trace.tsv"
+        -with-report "${run_dir}/report.html"
+        -with-timeline "${run_dir}/timeline.html"
+    )
+}
+
+# Строка в batches.tsv: label, samples, start, end, wall_sec, exit_code, work_bytes
+record_benchmark_run() {
+    local label="$1" samples="$2" start="$3" end="$4" exit_code="$5" work_dir="$6"
+    local runs_file="${BENCH_DIR}/batches.tsv"
+    local work_bytes="NA"
+
+    if [[ -d "$work_dir" ]]; then
+        work_bytes="$(du -sb "$work_dir" 2>/dev/null | cut -f1 || true)"
+        work_bytes="${work_bytes:-NA}"
+    fi
+    if [[ ! -f "$runs_file" ]]; then
+        printf 'run\tsamples\tstart_epoch\tend_epoch\twall_sec\texit_code\twork_bytes\n' > "$runs_file"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$label" "$samples" "$start" "$end" "$(( end - start ))" "$exit_code" "$work_bytes" >> "$runs_file"
+}
+
+run_benchmark_summary() {
+    echo ""
+    echo "Считаю сводку бенчмарка..."
+    if python3 "${PIPELINE_DIR}/bin/benchmark_summary.py" --bench-dir "$BENCH_DIR" --outdir "$OUTDIR"; then
+        echo "  Сводка: ${BENCH_DIR}/summary.md"
+    else
+        echo "  ПРЕДУПРЕЖДЕНИЕ: сводка бенчмарка не построена; запустите вручную:"
+        echo "  python3 ${PIPELINE_DIR}/bin/benchmark_summary.py --bench-dir $BENCH_DIR --outdir $OUTDIR"
+    fi
+}
+
+if (( BENCHMARK )); then
+    mkdir -p "$BENCH_DIR"
+    write_benchmark_environment
+fi
 
 merge_bad_reads() {
     local output_dir="${OUTDIR}/Reports/general"
@@ -382,9 +498,18 @@ run_final_reports() {
         nf_cmd+=(--skip_kraken)
     fi
 
+    if (( BENCHMARK )); then add_benchmark_flags nf_cmd final_reports; fi
+
     echo ""
     echo "Собираю общий Reports/..."
-    "${nf_cmd[@]}"
+    local start_ts end_ts exit_code=0
+    start_ts=$(date +%s)
+    "${nf_cmd[@]}" || exit_code=$?
+    end_ts=$(date +%s)
+    if (( BENCHMARK )); then
+        record_benchmark_run final_reports "$TOTAL_SAMPLES" "$start_ts" "$end_ts" "$exit_code" "$reports_workdir"
+    fi
+    return "$exit_code"
 }
 
 # --- Запуск батчей ---
@@ -431,8 +556,17 @@ for (( i = RESUME_FROM; i <= TOTAL_BATCHES; i++ )); do
     fi
 
     [[ -n "$NF_RESUME" ]] && NF_CMD+=("$NF_RESUME")
+    if (( BENCHMARK )); then add_benchmark_flags NF_CMD "batch_${i}"; fi
 
-    if "${NF_CMD[@]}"; then
+    BATCH_START=$(date +%s)
+    NF_EXIT=0
+    "${NF_CMD[@]}" || NF_EXIT=$?
+    if (( BENCHMARK )); then
+        # du до очистки work/ — это пиковый объём work/ для батча
+        record_benchmark_run "batch_${i}" "$BATCH_SAMPLES" "$BATCH_START" "$(date +%s)" "$NF_EXIT" "$WORKDIR"
+    fi
+
+    if (( NF_EXIT == 0 )); then
 
         echo "[batch ${i}/${TOTAL_BATCHES}] Завершён успешно"
         echo "batch_${i} OK $(date '+%Y-%m-%d %H:%M:%S') samples=${BATCH_SAMPLES}" >> "$LOG_FILE"
@@ -442,7 +576,7 @@ for (( i = RESUME_FROM; i <= TOTAL_BATCHES; i++ )); do
         rm -rf "${WORKDIR:?}"/*
         echo "  work/ очищен"
     else
-        EXIT_CODE=$?
+        EXIT_CODE=$NF_EXIT
         echo ""
         echo "============================================"
         echo "ОШИБКА: batch ${i} завершился с кодом ${EXIT_CODE}"
@@ -455,6 +589,7 @@ for (( i = RESUME_FROM; i <= TOTAL_BATCHES; i++ )); do
             [[ -n "$KRAKEN2_DB_2" ]] && echo -n " --kraken2_db_2 $KRAKEN2_DB_2"
             [[ -n "$KRAKEN2_DB_LABEL_2" ]] && echo -n " --kraken2_db_label_2 $KRAKEN2_DB_LABEL_2"
         fi
+        if (( BENCHMARK )); then echo -n " --benchmark"; fi
         echo ""
         echo ""
         echo "work/ сохранён для возможности -resume"
@@ -466,6 +601,7 @@ merge_bad_reads
 merge_invalid_fastqs
 merge_unsupported_layouts
 run_final_reports
+if (( BENCHMARK )); then run_benchmark_summary; fi
 
 echo ""
 echo "============================================"
@@ -473,4 +609,5 @@ echo "Все $TOTAL_BATCHES батчей завершены!"
 echo "Результаты в: $OUTDIR"
 echo "Итоговые отчёты: ${OUTDIR}/Reports"
 echo "Лог: $LOG_FILE"
+if (( BENCHMARK )); then echo "Бенчмарк: ${BENCH_DIR}/summary.md"; fi
 echo "============================================"
