@@ -22,6 +22,12 @@
 
 ### Added
 
+- `run_batches.sh --benchmark`: трассировка Nextflow (`trace.tsv`, `report.html`,
+  `timeline.html`) по каждому батчу, описание машины (`environment.tsv`),
+  тайминги запусков и объём `work/` (`batches.tsv`), а в конце — сводка
+  `bin/benchmark_summary.py`: образцов в час, CPU-часы и пиковая память на
+  образец, статистика по процессам (`benchmark/summary.md`, `per_*.tsv`).
+  Формат трассировки — `conf/benchmark.config`.
 - `Reports/tb-platform/snp/` — таблицы VCF для TB Platform: `snp_sites.tsv.gz`,
   `sample_snp_alleles.tsv.gz`, `vcf_table.tsv.gz` плюс `import_snp.sql`,
   `snp_db_manifest.tsv` и `samples.txt`. Новые процессы `SNP_DB_SHARDS`
