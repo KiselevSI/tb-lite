@@ -4,6 +4,9 @@
 
 ### Changed
 
+- `Reports/tb-platform/tblg.total.tsv` — сводная таблица линий TBLG по всем
+  образцам (склейка `lineage/*.lg.tsv`). Раньше она собиралась внутри
+  `TB_PLATFORM_TABLES` только для `filter.tbmix.tsv` и не публиковалась.
 - `.sra` из `SRATOOLS_PREFETCH` больше не копируются в `<outdir>/sra/`
   (~0,5 ГБ на образец), а у FASTP публикуется только `*.fastp.json` без
   HTML-отчёта. Оба файла дальше пайплайном не читаются.
