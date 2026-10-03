@@ -97,7 +97,7 @@ flowchart TD
 
 1. `CUSTOM_SRATOOLSNCBISETTINGS` — конфиг sra-tools.
 2. `SRATOOLS_PREFETCH` — скачивание `.sra` (до 2 повторов, после этого
-   accession пропускается — `errorStrategy ignore`). `.sra` публикуются в `sra/`.
+   accession пропускается — `errorStrategy ignore`). `.sra` остаются только в `work/` и в `outdir` не копируются.
 3. `SRA_DETECT_LAYOUT` — пробный `fasterq-dump`: 1 FASTQ → single,
    2 → paired, иначе accession пропускается и попадает в
    `unsupported_sra_layout.txt`.
@@ -651,7 +651,7 @@ Executor `local`, всего 12 CPU (`nextflow.config`). Ресурсы по lab
 
 | Путь | Процесс | Содержимое |
 |---|---|---|
-| `fastp/<sample>/` | FASTP | `*.fastp.json`, `*.fastp.html` |
+| `fastp/<sample>/` | FASTP | `*.fastp.json` |
 | `fastqc/<sample>/` | FASTQC | `*_fastqc.zip/html` |
 | `stats/picard/wgs/<sample>/` | PICARD_COLLECTWGSMETRICS | `*.CollectWgsMetrics.coverage_metrics` |
 | `stats/picard/alignment/<sample>/` | PICARD_COLLECTALIGNMENTSUMMARYMETRICS | `*.txt` |
@@ -670,7 +670,6 @@ Executor `local`, всего 12 CPU (`nextflow.config`). Ресурсы по lab
 | `kraken2/kraken2/<label>/<sample>/` | KRAKEN2 | отчёты Kraken2 |
 | `kraken2/bracken/<label>/<sample>/` | BRACKEN, ADD | Bracken (+ unclassified) |
 | `kraken2/combined/` | COMBINE | `<label>.all_samples.txt` |
-| `sra/` | SRATOOLS_PREFETCH | `.sra` (только SRA-режим) |
 | `snp_db/shards/` | SNP_DB_SHARDS | шарды SNP-таблиц |
 | `Reports/general/` | FINAL_TABLE, FILTER, TRIMMING | `FINAL_TABLE.xlsx`, `drug_resist.xlsx`, `bad_reads_*.txt` |
 | `Reports/tb-platform/` | TB_PLATFORM_TABLES, IS6110_TABLES, SNP_DB_TABLES | см. разделы 3.3, 3.4, 4 |
